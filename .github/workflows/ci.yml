@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DOTNET_NOLOGO: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Format
+        run: |
+          dotnet tool restore
+          dotnet csharpier check .
+
+      - run: dotnet restore Tralys.Ecs.slnx
+
+      - run: dotnet build Tralys.Ecs.slnx -c Release --no-restore
+
+      - name: Test
+        run: |
+          for project in tests/Tralys.Ecs.Tests tests/Tralys.Ecs.Generators.Tests tests/Tralys.Ecs.Scheduling.Tests; do
+            echo "::group::$project"
+            dotnet run --project "$project" -c Release --no-build
+            echo "::endgroup::"
+          done
+
+      # IlcTreatWarningsAsErrors turns any IL2xxx/IL3xxx trim or AOT warning into a failed publish.
+      - name: AOT smoke
+        run: |
+          dotnet publish tests/Tralys.Ecs.Aot.Smoke -c Release
+          tests/Tralys.Ecs.Aot.Smoke/bin/Release/net11.0/linux-x64/publish/Tralys.Ecs.Aot.Smoke

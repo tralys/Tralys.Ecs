@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tralys.Ecs/Tralys.Ecs.csproj" />
+    <Project Path="src/Tralys.Ecs.Generators/Tralys.Ecs.Generators.csproj" />
+    <Project Path="src/Tralys.Ecs.Scheduling/Tralys.Ecs.Scheduling.csproj" />
+    <Project Path="src/Tralys.Ecs.Executor.Pool/Tralys.Ecs.Executor.Pool.csproj" />
+    <Project Path="src/Tralys.Ecs.Testing/Tralys.Ecs.Testing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tralys.Ecs.Tests/Tralys.Ecs.Tests.csproj" />
+    <Project Path="tests/Tralys.Ecs.Generators.Tests/Tralys.Ecs.Generators.Tests.csproj" />
+    <Project Path="tests/Tralys.Ecs.Scheduling.Tests/Tralys.Ecs.Scheduling.Tests.csproj" />
+    <Project Path="tests/Tralys.Ecs.Downstream.Fixture/Tralys.Ecs.Downstream.Fixture.csproj" />
+    <Project Path="tests/Tralys.Ecs.ManyTypes.Fixture/Tralys.Ecs.ManyTypes.Fixture.csproj" />
+    <Project Path="tests/Tralys.Ecs.Aot.Smoke/Tralys.Ecs.Aot.Smoke.csproj" />
+    <Project Path="tests/Tralys.Ecs.Examples/Tralys.Ecs.Examples.csproj" />
+  </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/Tralys.Ecs.Benchmarks/Tralys.Ecs.Benchmarks.csproj" />
+    <Project Path="bench/Tralys.Ecs.Spikes/Tralys.Ecs.Spikes.csproj" />
+  </Folder>
+</Solution>
