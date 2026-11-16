@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Tralys.Ecs/Tralys.Ecs.csproj" />
+    <ProjectReference Include="../Tralys.Ecs.Scheduling/Tralys.Ecs.Scheduling.csproj" />
+  </ItemGroup>
+</Project>
