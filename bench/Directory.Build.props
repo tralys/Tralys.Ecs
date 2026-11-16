@@ -1,0 +1,8 @@
+<Project>
+  <Import Project="../Directory.Build.props" />
+
+  <PropertyGroup>
+    <!-- BenchmarkDotNet, and the wrapper project it generates here, need a newer Roslyn than the generator pins. -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+</Project>

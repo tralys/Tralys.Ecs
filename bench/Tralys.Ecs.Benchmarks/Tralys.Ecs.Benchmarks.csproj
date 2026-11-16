@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Tralys.Ecs/Tralys.Ecs.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Scheduling/Tralys.Ecs.Scheduling.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Executor.Pool/Tralys.Ecs.Executor.Pool.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Testing/Tralys.Ecs.Testing.csproj" />
+    <ProjectReference
+      Include="../../src/Tralys.Ecs.Generators/Tralys.Ecs.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false"
+    />
+  </ItemGroup>
+</Project>
