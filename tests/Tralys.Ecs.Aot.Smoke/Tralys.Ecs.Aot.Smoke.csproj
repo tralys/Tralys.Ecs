@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PublishAot>true</PublishAot>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IlcInstructionSet>x86-64-v3</IlcInstructionSet>
+    <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Generated/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Tralys.Ecs/Tralys.Ecs.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Scheduling/Tralys.Ecs.Scheduling.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Executor.Pool/Tralys.Ecs.Executor.Pool.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Testing/Tralys.Ecs.Testing.csproj" />
+    <ProjectReference Include="../Tralys.Ecs.Downstream.Fixture/Tralys.Ecs.Downstream.Fixture.csproj" />
+    <ProjectReference
+      Include="../../src/Tralys.Ecs.Generators/Tralys.Ecs.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false"
+    />
+  </ItemGroup>
+</Project>
