@@ -26,5 +26,15 @@
     <IsPackable>false</IsPackable>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None
+      Include="$(MSBuildThisFileDirectory)icon.png"
+      Pack="true"
+      PackagePath="/"
+      Visible="false"
+    />
+  </ItemGroup>
 </Project>
