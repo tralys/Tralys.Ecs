@@ -6,10 +6,11 @@ namespace Tralys.Ecs;
 public static class AllocationAssert
 {
     /// <summary>Bytes allocated per call of <paramref name="tick"/> in steady state, rounded up so any allocation shows. After
-    /// <paramref name="warmup"/> calls it measures rounds of <paramref name="calls"/> calls: two allocation-free rounds in a row give 0,
-    /// otherwise it keeps going for <paramref name="settle"/> (default one second), so allocations of code the JIT has not yet optimized do
-    /// not count, and returns the last round. Counts the calling thread only unless <paramref name="allThreads"/> is set; then any thread
-    /// allocating meanwhile, workers or not, adds to the count.</summary>
+    /// <paramref name="warmup"/> calls it measures rounds, the first of <paramref name="calls"/> calls and each twice the last, so storage
+    /// that grows with the call count keeps resizing inside them: two allocation-free rounds in a row give 0, otherwise it keeps going for
+    /// <paramref name="settle"/> (default one second), so allocations of code the JIT has not yet optimized do not count, and returns the
+    /// last round. Counts the calling thread only unless <paramref name="allThreads"/> is set; then any thread allocating meanwhile, workers
+    /// or not, adds to the count.</summary>
     public static long BytesPerCall(
         Action tick,
         int warmup = 64,
@@ -26,15 +27,17 @@ public static class AllocationAssert
         var budget = settle ?? TimeSpan.FromSeconds(1);
         var started = Stopwatch.GetTimestamp();
         var quiet = 0;
+        long round = calls;
         while (true)
         {
             var before = Allocated(allThreads);
-            for (var i = 0; i < calls; i++)
+            for (long i = 0; i < round; i++)
                 tick();
-            var perCall = (Allocated(allThreads) - before + calls - 1) / calls;
+            var perCall = (Allocated(allThreads) - before + round - 1) / round;
             quiet = perCall == 0 ? quiet + 1 : 0;
             if (quiet == 2 || Stopwatch.GetElapsedTime(started) >= budget)
                 return perCall;
+            round *= 2;
         }
     }
 
