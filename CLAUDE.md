@@ -7,7 +7,6 @@ A source-generated C# ECS (.NET 11, NativeAOT, no reflection in the core). Packa
 - `dotnet build Tralys.Ecs.slnx` — warnings are errors.
 - `dotnet run --project tests/Tralys.Ecs.Tests --no-build`, and the same for `tests/Tralys.Ecs.Generators.Tests` and `tests/Tralys.Ecs.Scheduling.Tests`.
 - `dotnet run --project tests/Tralys.Ecs.Aot.Smoke --no-build`; CI also runs `dotnet publish tests/Tralys.Ecs.Aot.Smoke -c Release` and the published binary.
-- Format with `dotnet csharpier format <files>`; CI runs `dotnet csharpier check .`.
 
 ## Rules the build enforces
 
