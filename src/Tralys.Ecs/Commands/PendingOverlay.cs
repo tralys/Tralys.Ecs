@@ -82,7 +82,13 @@ internal sealed class PendingOverlay
             entries[at].Enabled = enabled;
     }
 
-    public void Drop(uint entity) => heads.Remove(entity);
+    public void Drop(uint entity)
+    {
+        heads.Remove(entity);
+        // A closed batch leaves nothing staged, so no playback would ever Clear the entries it wrote.
+        if (heads.Count == 0)
+            count = 0;
+    }
 
     public void Clear()
     {
