@@ -56,9 +56,9 @@ public sealed class CancelledCreateTests
     [Test]
     public async Task Edges_and_rows_on_an_entity_created_and_destroyed_in_a_body_are_never_logged()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var other = world.Create();
-        var cursor = world.Changes.Register("cancelled");
+        var tail = new LogTail(world);
         using (world.BeginDelivery())
         {
             var created = world.Create();
@@ -70,7 +70,7 @@ public sealed class CancelledCreateTests
         world.Playback();
 
         var kinds = new List<LogKind>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
             kinds.Add(entry.Kind);
         await Assert.That(kinds).IsEmpty();
     }

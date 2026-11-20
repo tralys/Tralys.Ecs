@@ -136,7 +136,13 @@ internal static class CaptureFormat
         }
     }
 
-    // Restore reads a value through its layout, kind, storage and traits, so any of them changing makes old bytes unreadable.
+    const ComponentTraits RestoredTraits =
+        ComponentTraits.Enableable
+        | ComponentTraits.Singleton
+        | ComponentTraits.InheritedTag
+        | ComponentTraits.PresenceMask;
+
+    // Restore reads a value through its layout, kind, storage and RestoredTraits, so any of them changing makes old bytes unreadable.
     internal static ulong Shape(ComponentDescriptor descriptor, Registry registry)
     {
         var hash = 14695981039346656037UL;
@@ -147,7 +153,7 @@ internal static class CaptureFormat
         }
         Mix((ulong)descriptor.Kind);
         Mix((ulong)descriptor.Storage);
-        Mix((ulong)descriptor.Traits);
+        Mix((ulong)(descriptor.Traits & RestoredTraits));
         Mix((ulong)descriptor.RelationTraits);
         Mix((ulong)descriptor.Size);
         Mix(descriptor.LayoutHash);

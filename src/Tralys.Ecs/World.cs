@@ -11,8 +11,9 @@ public readonly record struct WorldOptions
     /// <summary>Runs partitioned queries. Null runs them on the calling thread in chunk order.</summary>
     public IChunkExecutor? Executor { get; init; }
 
-    /// <summary>Structural-log entries kept for the slowest cursor before it reads <see cref="CursorStatus.Expired"/>. Zero means 1,048,576.</summary>
-    public int LogRetentionCap { get; init; }
+    /// <summary>Changes each <see cref="ChangeWatch{TBits}"/> holds between collects; past it the watch drops them and marks everything at
+    /// its next collect. Zero means 1,048,576.</summary>
+    public int WatchQueueCap { get; init; }
 
     /// <summary>Throws when the world API changes the world from a thread other than its owner: the creating thread, or the last to call
     /// <see cref="World.BindToCurrentThread"/>. The check runs only when this is set, in debug and release builds alike. For tests and
@@ -79,9 +80,10 @@ public sealed partial class World : IDisposable
         root = ArchetypeFor(ArchetypeSignature.Empty(registry.IndexBound));
         changes = new ChangeTracking(
             this,
-            options.LogRetentionCap == 0 ? 1 << 20 : options.LogRetentionCap,
+            options.WatchQueueCap == 0 ? 1 << 20 : options.WatchQueueCap,
             attributed
         );
+        hierarchy.Raises = changes;
         observers = new ObserverRegistry(this);
         stage = new CommandBuffer(this, parallel: false);
         buffersById.Add(stage);

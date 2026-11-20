@@ -51,7 +51,7 @@ public sealed class AnyOfAttribute<T> : Attribute
 /// <summary>Visits only rows whose <typeparamref name="T"/> changed since the query last ran to completion in the world.</summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
 public sealed class ChangedAttribute<T> : Attribute
-    where T : struct, IComponent;
+    where T : struct, IComponent, ITracked;
 
 /// <summary>The query also visits entities whose destroy is pending; by default it skips them.</summary>
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]

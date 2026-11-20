@@ -7,7 +7,7 @@ using Tralys.Ecs.Tests;
 
 namespace Tralys.Ecs.Tests;
 
-[Component]
+[Component, Tracked]
 public partial struct Position
 {
     public float X;
@@ -21,13 +21,13 @@ public partial struct Velocity
     public float Y;
 }
 
-[Component]
+[Component, Tracked]
 public partial struct Health
 {
     public int Value;
 }
 
-[Component, Enableable]
+[Component, Enableable, Tracked]
 public partial struct Burning
 {
     public int Ticks;
@@ -36,13 +36,13 @@ public partial struct Burning
 [Tag]
 public partial struct Npc;
 
-[Tag, Enableable]
+[Tag, Enableable, Tracked]
 public partial struct Frozen;
 
 [Tag, Storage(StorageKind.Sparse)]
 public partial struct Rare;
 
-[Component, Storage(StorageKind.Sparse)]
+[Component, Storage(StorageKind.Sparse), Tracked]
 public partial struct Dialog
 {
     public int Page;
@@ -67,13 +67,13 @@ public partial struct Squad
     public EntityArray4 Members;
 }
 
-[Component, Untracked]
+[Component]
 public partial struct Scratchpad
 {
     public int Value;
 }
 
-[Component, Untracked, Storage(StorageKind.Sparse)]
+[Component, Storage(StorageKind.Sparse)]
 public partial struct Footnote
 {
     public int Line;
@@ -97,7 +97,7 @@ public partial struct Label
     public string Text;
 }
 
-[Component]
+[Component, Tracked]
 [UniqueIndex(nameof(Number), OnConflict = ConflictPolicy.ReplaceExisting)]
 public partial struct Badge
 {
@@ -263,7 +263,7 @@ public partial struct Escorts;
 [Relation(OnTargetDestroyed = TargetPolicy.DestroySource)]
 public partial struct CrewOf;
 
-[Rows]
+[Rows, Tracked]
 public partial struct Effect
 {
     [RowKey]
@@ -285,7 +285,7 @@ public partial struct Seat
     public int Slot;
 }
 
-[Rows, Untracked]
+[Rows]
 public partial struct Tally
 {
     [RowKey]
@@ -386,4 +386,6 @@ static class TestWorlds
 
     public static World Create(in WorldOptions options = default) =>
         World.Create(Registry, options with { CheckThread = true });
+
+    public static World Logged() => Create(new WorldOptions { AttributedLogCapacity = 1 << 12 });
 }

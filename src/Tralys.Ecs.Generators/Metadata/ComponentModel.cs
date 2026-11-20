@@ -98,7 +98,7 @@ sealed record BundleModel(
 
 static class Traits
 {
-    public const int Untracked = 1 << 0;
+    public const int Tracked = 1 << 0;
     public const int Enableable = 1 << 1;
     public const int ReplaceOnly = 1 << 2;
     public const int Singleton = 1 << 3;

@@ -57,7 +57,7 @@ public partial class IntrospectionBench
             total += archetype.EntityCount + archetype.BytesPerChunk + (long)(archetype.Fill * 100);
         foreach (var query in introspection.Queries)
             total += query.MatchedEntities;
-        total += introspection.Log.Length + introspection.ChunksVisited;
+        total += introspection.StructuralChanges + introspection.ChunksVisited;
         var counter = new Counter();
         introspection.VisitEntity(sample, ref counter);
         return total + counter.Seen;

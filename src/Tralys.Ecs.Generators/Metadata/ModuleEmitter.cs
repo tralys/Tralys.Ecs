@@ -148,6 +148,8 @@ static class ModuleEmitter
                 );
                 break;
         }
+        if ((model.Traits & Traits.Tracked) != 0)
+            list.Add("global::Tralys.Ecs.ITracked");
         return string.Join(", ", list);
     }
 

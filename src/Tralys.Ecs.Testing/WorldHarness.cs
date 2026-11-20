@@ -72,48 +72,27 @@ public sealed class WorldHarness<TTick>
     /// <exception cref="TimeoutException">A world still changed after <paramref name="maxTicks"/> ticks.</exception>
     public int RunUntilQuiescent(int maxTicks, Func<long>? progress = null)
     {
-        var cursors = new CursorId[worlds.Count];
-        for (var i = 0; i < worlds.Count; i++)
-            cursors[i] = worlds[i].Changes.Register("harness quiescence");
-        try
+        var measured = progress?.Invoke() ?? 0;
+        var counted = StructuralChanges();
+        for (var ran = 1; ran <= maxTicks; ran++)
         {
-            var measured = progress?.Invoke() ?? 0;
-            for (var ran = 1; ran <= maxTicks; ran++)
-            {
-                Step();
-                var changed = false;
-                for (var i = 0; i < worlds.Count; i++)
-                    changed |= Drain(worlds[i], cursors[i]);
-                var now = progress?.Invoke() ?? 0;
-                if (!changed && now == measured)
-                    return ran;
-                measured = now;
-            }
-        }
-        finally
-        {
-            for (var i = 0; i < worlds.Count; i++)
-                worlds[i].Changes.Unregister(cursors[i]);
+            Step();
+            var now = progress?.Invoke() ?? 0;
+            var changes = StructuralChanges();
+            if (changes == counted && now == measured)
+                return ran;
+            measured = now;
+            counted = changes;
         }
         throw new TimeoutException($"The worlds still changed after {maxTicks} ticks.");
     }
 
-    static bool Drain(World world, CursorId cursor)
+    long StructuralChanges()
     {
-        var read = world.Changes.Sample(cursor);
-        var changed = read.Status == CursorStatus.Expired;
-        if (!changed)
-        {
-            foreach (var entry in read.Log)
-            {
-                if (entry.Kind == LogKind.Replaced)
-                    continue;
-                changed = true;
-                break;
-            }
-        }
-        world.Changes.Commit(cursor, read.Until);
-        return changed;
+        var total = 0L;
+        foreach (var world in worlds)
+            total += world.Introspection.StructuralChanges;
+        return total;
     }
 
     /// <summary>Snapshots every world as the baseline <see cref="Reset"/> returns to, and remembers the tick count.</summary>

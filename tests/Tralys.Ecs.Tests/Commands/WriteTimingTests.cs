@@ -2,10 +2,10 @@ namespace Tralys.Ecs.Tests;
 
 public sealed class WriteTimingTests
 {
-    static List<string> Logged(World world, CursorId cursor)
+    static List<string> Logged(LogTail tail)
     {
         var kinds = new List<string>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.TypeIndex >= 0)
                 kinds.Add(entry.Kind.ToString());
@@ -16,10 +16,10 @@ public sealed class WriteTimingTests
     [Test]
     public async Task Inside_an_observer_every_presence_change_waits_for_playback_and_reads_see_it_at_once()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var holder = world.Create();
         world.Set(holder, new Burning { Ticks = 1 });
-        var cursor = world.Changes.Register("timing");
+        var tail = new LogTail(world);
 
         bool seen;
         using (world.BeginDelivery())
@@ -28,9 +28,9 @@ public sealed class WriteTimingTests
             world.SetEnabled<Burning>(holder, false);
             seen = world.Has<Dialog>(holder) && !world.Has<Burning>(holder);
         }
-        var beforePlayback = Logged(world, cursor);
+        var beforePlayback = Logged(tail);
         world.Playback();
-        var afterPlayback = Logged(world, cursor);
+        var afterPlayback = Logged(tail);
 
         await Assert.That(seen).IsTrue();
         await Assert.That(beforePlayback).IsEmpty();
@@ -59,8 +59,8 @@ public sealed class WriteTimingTests
     [Test]
     public async Task A_bundle_created_and_destroyed_inside_an_observer_logs_nothing()
     {
-        using var world = TestWorlds.Create();
-        var cursor = world.Changes.Register("bundle");
+        using var world = TestWorlds.Logged();
+        var tail = new LogTail(world);
 
         using (world.BeginDelivery())
         {
@@ -69,7 +69,7 @@ public sealed class WriteTimingTests
         }
         world.Playback();
 
-        await Assert.That(Logged(world, cursor)).IsEmpty();
+        await Assert.That(Logged(tail)).IsEmpty();
     }
 
     [Test]

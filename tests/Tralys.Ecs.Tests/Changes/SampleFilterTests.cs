@@ -15,11 +15,11 @@ public sealed class SampleFilterTests
         var strict = world.Changes.Register("strict");
         var withDying = world.Changes.Register(
             "dying",
-            new CursorOptions(CategoryMask.All) { IncludePendingDestroy = true }
+            new CursorOptions { IncludePendingDestroy = true }
         );
         var withDetached = world.Changes.Register(
             "detached",
-            new CursorOptions(CategoryMask.All) { IncludeDetached = true }
+            new CursorOptions { IncludeDetached = true }
         );
 
         world.Set(dying, new Position { X = 1 });
@@ -33,19 +33,12 @@ public sealed class SampleFilterTests
         world.Detach(detached);
         world.SetEnabled<Burning>(disabled, false);
 
-        var strictSeen = Seen(world, strict);
-        var dyingSeen = Seen(world, withDying);
-        var detachedSeen = Seen(world, withDetached);
-
-        await Assert.That(strictSeen.Changed).IsEmpty();
-        await Assert.That(strictSeen.Logged).IsEquivalentTo([disabled]);
-        await Assert.That(dyingSeen.Changed).IsEquivalentTo([dying, dying, dying]);
-        await Assert.That(dyingSeen.Logged).IsEquivalentTo([dying, dying, disabled]);
-        await Assert.That(detachedSeen.Changed).IsEquivalentTo([detached, detached]);
-        await Assert.That(detachedSeen.Logged).IsEquivalentTo([detached, disabled]);
+        await Assert.That(Seen(world, strict)).IsEmpty();
+        await Assert.That(Seen(world, withDying)).IsEquivalentTo([dying, dying, dying]);
+        await Assert.That(Seen(world, withDetached)).IsEquivalentTo([detached, detached]);
     }
 
-    static (List<Entity> Changed, List<Entity> Logged) Seen(World world, CursorId cursor)
+    static List<Entity> Seen(World world, CursorId cursor)
     {
         var sample = world.Changes.Sample(cursor);
         var changed = new List<Entity>();
@@ -57,19 +50,13 @@ public sealed class SampleFilterTests
             changed.Add(value.Entity);
         foreach (var row in sample.ChangedRows<int, Effect>())
             changed.Add(row.Entity);
-        var logged = new List<Entity>();
-        foreach (var entry in sample.Log)
-        {
-            if (entry.TypeIndex >= 0)
-                logged.Add(entry.Entity);
-        }
-        return (changed, logged);
+        return changed;
     }
 
     [Test]
     public async Task An_entity_leaving_pending_destroy_is_logged_with_its_subtree()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var cancelled = world.Create();
         var child = world.Create();
         world.SetParent(child, cancelled);
@@ -80,7 +67,7 @@ public sealed class SampleFilterTests
         world.Destroy(cancelled);
         world.Destroy(doomed);
         world.Destroy(played);
-        var cursor = world.Changes.Register("spared");
+        var tail = new LogTail(world);
 
         world.CancelDestroy(cancelled);
         world.ClearParent(moved);
@@ -90,7 +77,7 @@ public sealed class SampleFilterTests
         world.Playback();
 
         var spared = new List<Entity>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Kind == LogKind.DestroyCancelled)
                 spared.Add(entry.Entity);

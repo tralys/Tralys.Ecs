@@ -22,9 +22,10 @@ public sealed class TagAttribute : Attribute
     public bool Inherited { get; set; }
 }
 
-/// <summary>Writes to this component carry no change stamps.</summary>
+/// <summary>Writes to this component, enableable tag or row type carry change stamps, which change samples, watches,
+/// <see cref="ChangeTracking.VersionOf{T}"/> and <c>Changed</c> query filters read; a type without it carries none.</summary>
 [AttributeUsage(AttributeTargets.Struct, Inherited = false)]
-public sealed class UntrackedAttribute : Attribute;
+public sealed class TrackedAttribute : Attribute;
 
 /// <summary>Where a component or tag is stored; set it with <see cref="StorageAttribute"/>.</summary>
 public enum StorageKind

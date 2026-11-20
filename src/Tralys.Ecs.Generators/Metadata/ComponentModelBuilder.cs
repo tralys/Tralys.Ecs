@@ -80,8 +80,8 @@ static class ComponentModelBuilder
 
         foreach (var attribute in type.GetAttributes())
         {
-            if (Symbols.IsAttribute(attribute, "Tralys.Ecs.UntrackedAttribute"))
-                traits |= Traits.Untracked;
+            if (Symbols.IsAttribute(attribute, "Tralys.Ecs.TrackedAttribute"))
+                traits |= Traits.Tracked;
             else if (Symbols.IsAttribute(attribute, "Tralys.Ecs.EnableableAttribute"))
                 traits |= Traits.Enableable;
             else if (Symbols.IsAttribute(attribute, "Tralys.Ecs.ReplaceOnlyAttribute"))

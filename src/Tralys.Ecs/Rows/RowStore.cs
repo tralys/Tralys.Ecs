@@ -2,12 +2,7 @@ using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
 
-internal interface IKeyJournal
-{
-    void DropThrough(ulong version);
-}
-
-internal abstract class RowStore(int type) : IKeyJournal
+internal abstract class RowStore(int type)
 {
     public readonly int Type = type;
 
@@ -22,11 +17,8 @@ internal abstract class RowStore(int type) : IKeyJournal
 
     public abstract void ReleaseEntity(World world, Entity entity, LifecycleReason reason);
 
-    public abstract void DropThrough(ulong version);
-
     public abstract void Clear();
 
-    // The copy is not registered as a journal; whoever installs it in a world registers it.
     public abstract RowStore Clone();
 
     public abstract void Load(RowStore source);
@@ -47,12 +39,13 @@ internal sealed class RowStore<TKey, TRow> : RowStore
 {
     const int IndexAbove = 8;
 
-    internal sealed class Block
+    internal sealed class Block(bool stamped)
     {
+        public readonly bool Stamped = stamped;
         public Entity Owner;
         public TRow[] Rows = new TRow[4];
-        public ulong[] Changed = new ulong[4];
-        public ulong[] Added = new ulong[4];
+        public ulong[] Changed = stamped ? new ulong[4] : [];
+        public ulong[] Added = stamped ? new ulong[4] : [];
         public bool[] Dead = new bool[4];
         public int Count;
         public int Live;
@@ -70,7 +63,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         public int Older = -1;
         public bool Raised;
 
-        // The four row arrays grow together, so they keep one length.
+        // The row, dead and, when stamped, stamp arrays grow together, so they keep one length.
         public void Load(Block source)
         {
             Owner = source.Owner;
@@ -83,13 +76,19 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             {
                 var length = source.Rows.Length;
                 Rows = new TRow[length];
-                Changed = new ulong[length];
-                Added = new ulong[length];
+                if (Stamped)
+                {
+                    Changed = new ulong[length];
+                    Added = new ulong[length];
+                }
                 Dead = new bool[length];
             }
             Copies.Load(ref Rows, source.Rows, source.Count);
-            Copies.Load(ref Changed, source.Changed, source.Count);
-            Copies.Load(ref Added, source.Added, source.Count);
+            if (Stamped)
+            {
+                Copies.Load(ref Changed, source.Changed, source.Count);
+                Copies.Load(ref Added, source.Added, source.Count);
+            }
             Copies.Load(ref Dead, source.Dead, source.Count);
             Count = source.Count;
             Live = source.Live;
@@ -121,18 +120,12 @@ internal sealed class RowStore<TKey, TRow> : RowStore
     int raisedCount;
     bool walking;
 
-    TKey[] journalKeys = new TKey[16];
-    ulong[] journalVersions = new ulong[16];
-    int journalStart;
-    int journalEnd;
-    long journalBase;
-
     public RowStore(World world, int type)
         : base(type)
     {
         this.world = world;
         var descriptor = world.registry[type];
-        tracked = descriptor.IsTracked;
+        tracked = descriptor.IsStamped;
         ownsBuffers = world.layout.OwnsBuffers[type];
         presence = (descriptor.Traits & ComponentTraits.PresenceMask) != 0;
         if (
@@ -147,7 +140,6 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             );
         if ((descriptor.Traits & ComponentTraits.ReverseKeyIndex) != 0)
             owners = [];
-        world.changes.journals.Add(this);
     }
 
     RowStore(RowStore<TKey, TRow> config)
@@ -175,7 +167,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         if (blocks.Length < source.blockCount)
             Array.Resize(ref blocks, source.blocks.Length);
         for (var i = 0; i < source.blockCount; i++)
-            (blocks[i] ??= new Block()).Load(source.blocks[i]);
+            (blocks[i] ??= new Block(tracked)).Load(source.blocks[i]);
         Array.Clear(blocks, source.blockCount, blocks.Length - source.blockCount);
         blockCount = source.blockCount;
         Copies.Load(freeBlocks, source.freeBlocks);
@@ -185,16 +177,6 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         if (owners is not null)
             Copies.Load(owners, source.owners!);
         ownerLists.Load(source.ownerLists);
-        if (journalKeys.Length < source.journalEnd)
-        {
-            journalKeys = new TKey[source.journalKeys.Length];
-            journalVersions = new ulong[source.journalKeys.Length];
-        }
-        Copies.Load(ref journalKeys, source.journalKeys, source.journalEnd);
-        Copies.Load(ref journalVersions, source.journalVersions, source.journalEnd);
-        journalStart = source.journalStart;
-        journalEnd = source.journalEnd;
-        journalBase = source.journalBase;
     }
 
     public override int LiveRows(Entity owner) => BlockOf(owner)?.Live ?? 0;
@@ -242,7 +224,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             slot = blockCount++;
             if (slot == blocks.Length)
                 Array.Resize(ref blocks, blocks.Length * 2);
-            blocks[slot] = new Block { Slot = slot };
+            blocks[slot] = new Block(tracked) { Slot = slot };
         }
         var block = blocks[slot];
         block.Owner = entity;
@@ -292,7 +274,8 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         row.RowKey = key;
         block.Dead[at] = false;
         var stamp = tracked && world.Tracking ? world.version : 0;
-        block.Changed[at] = block.Added[at] = stamp;
+        if (tracked)
+            block.Changed[at] = block.Added[at] = stamp;
         Raise(block, stamp);
         if (block.Index is { } index)
             index[key] = at;
@@ -302,7 +285,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             block.Presence |= Bit(key);
         if (owners is not null)
             AddOwner(key, block.Owner);
-        world.changes.Append(LogKind.RowAdded, block.Owner, Type, reason, Journal(key));
+        world.changes.Append(LogKind.RowAdded, block.Owner, Type, reason);
         return at;
     }
 
@@ -423,7 +406,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         }
         else
             Shift(block, at);
-        world.changes.Append(LogKind.RowRemoved, block.Owner, Type, reason, Journal(key));
+        world.changes.Append(LogKind.RowRemoved, block.Owner, Type, reason);
         ref var bytes = ref Unsafe.As<TRow, byte>(ref departing);
         if (ownsBuffers)
             world.FreeBuffers(Type, ref bytes);
@@ -456,8 +439,11 @@ internal sealed class RowStore<TKey, TRow> : RowStore
     {
         var tail = block.Count - at - 1;
         Array.Copy(block.Rows, at + 1, block.Rows, at, tail);
-        Array.Copy(block.Changed, at + 1, block.Changed, at, tail);
-        Array.Copy(block.Added, at + 1, block.Added, at, tail);
+        if (tracked)
+        {
+            Array.Copy(block.Changed, at + 1, block.Changed, at, tail);
+            Array.Copy(block.Added, at + 1, block.Added, at, tail);
+        }
         Array.Copy(block.Dead, at + 1, block.Dead, at, tail);
         block.Count--;
         block.Rows[block.Count] = default;
@@ -476,8 +462,11 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             if (to != from)
             {
                 block.Rows[to] = block.Rows[from];
-                block.Changed[to] = block.Changed[from];
-                block.Added[to] = block.Added[from];
+                if (tracked)
+                {
+                    block.Changed[to] = block.Changed[from];
+                    block.Added[to] = block.Added[from];
+                }
                 block.Dead[to] = false;
             }
             to++;
@@ -494,8 +483,11 @@ internal sealed class RowStore<TKey, TRow> : RowStore
     {
         var size = block.Rows.Length * 2;
         Array.Resize(ref block.Rows, size);
-        Array.Resize(ref block.Changed, size);
-        Array.Resize(ref block.Added, size);
+        if (tracked)
+        {
+            Array.Resize(ref block.Changed, size);
+            Array.Resize(ref block.Added, size);
+        }
         Array.Resize(ref block.Dead, size);
         block.Moves++;
     }
@@ -559,52 +551,6 @@ internal sealed class RowStore<TKey, TRow> : RowStore
                 $"{world.registry[Type].Name} has no reverse key index; declare it [Rows(ReverseKeyIndex = true)]."
             );
         return owners.TryGetValue(key, out var list) ? new EntityList(ownerLists, list) : default;
-    }
-
-    ulong Journal(in TKey key)
-    {
-        if (!world.changes.LogActive)
-            return 0;
-        if (journalEnd == journalKeys.Length)
-        {
-            var live = journalEnd - journalStart;
-            if (journalStart > journalKeys.Length / 2)
-            {
-                Array.Copy(journalKeys, journalStart, journalKeys, 0, live);
-                Array.Copy(journalVersions, journalStart, journalVersions, 0, live);
-            }
-            else
-            {
-                var keys = new TKey[journalKeys.Length * 2];
-                var versions = new ulong[keys.Length];
-                Array.Copy(journalKeys, journalStart, keys, 0, live);
-                Array.Copy(journalVersions, journalStart, versions, 0, live);
-                journalKeys = keys;
-                journalVersions = versions;
-            }
-            journalBase += journalStart;
-            journalStart = 0;
-            journalEnd = live;
-        }
-        journalKeys[journalEnd] = key;
-        journalVersions[journalEnd] = world.version;
-        return (ulong)(journalBase + journalEnd++);
-    }
-
-    public TKey KeyAt(ulong sequence)
-    {
-        var at = (long)sequence - journalBase;
-        if (at < journalStart || at >= journalEnd)
-            throw new InvalidOperationException(
-                "That row key has been trimmed with its log entry."
-            );
-        return journalKeys[at];
-    }
-
-    public override void DropThrough(ulong version)
-    {
-        while (journalStart < journalEnd && journalVersions[journalStart] <= version)
-            journalKeys[journalStart++] = default!;
     }
 
     public override void ApplyUpsert(
@@ -697,6 +643,5 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             freeBlocks.Push(i);
         owners?.Clear();
         ownerLists.Clear();
-        DropThrough(ulong.MaxValue);
     }
 }

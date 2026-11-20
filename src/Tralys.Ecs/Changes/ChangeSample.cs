@@ -1,136 +1,44 @@
+using System.Diagnostics;
+
 namespace Tralys.Ecs;
 
-/// <summary>One cursor sample: the structural log and changed values in the version window (<see cref="Since"/>, <see cref="Until"/>].</summary>
+/// <summary>One cursor sample: the values and rows stamped in the version window (<see cref="Since"/>, <see cref="Until"/>]. Adds of
+/// untracked types, removals and disables leave no stamp; a <see cref="ChangeWatch{TBits}"/> hears those.</summary>
 public readonly ref struct ChangeSample
 {
     readonly World world;
     readonly CursorOptions options;
 
-    internal ChangeSample(
-        World world,
-        ulong since,
-        ulong until,
-        CursorStatus status,
-        CursorOptions options
-    )
+    internal ChangeSample(World world, ulong since, ulong until, CursorOptions options)
     {
         this.world = world;
         Since = since;
         Until = until;
-        Status = status;
         this.options = options;
     }
 
-    /// <summary><see cref="CursorStatus.Expired"/> when the log was trimmed past the cursor, so <see cref="Log"/> misses entries; resync from current state.</summary>
-    public CursorStatus Status { get; }
-
-    /// <summary>The version the cursor last committed; the window excludes it.</summary>
+    /// <summary>The version the cursor last committed; the window excludes it. Zero after the world was reset to a snapshot, so the
+    /// sample holds every stamped value.</summary>
     public ulong Since { get; }
 
     /// <summary>The world version when the sample was taken; the window includes it. Pass it to <see cref="ChangeTracking.Commit"/> to consume the sample.</summary>
     public ulong Until { get; }
 
-    /// <summary>The structural-log entries in the window that pass the cursor's <see cref="CursorOptions"/>, oldest first. An entry for a
-    /// type is skipped when its entity is pending destroy or detached as the entry is read, unless the options include it.</summary>
-    public LogSpan Log => new(world, Since, Until, options);
-
     /// <summary>The entities holding <typeparamref name="T"/> present whose value was stamped in the window, skipping an entity pending
-    /// destroy or detached unless the cursor's options include it; removals and disables are not seen (the log has them), an
-    /// <see cref="UntrackedAttribute"/> type yields none, and a value stamped again after <see cref="Until"/> shows in the next sample
-    /// instead.</summary>
+    /// destroy or detached unless the cursor's options include it; removals and disables are not seen, and a value stamped again after
+    /// <see cref="Until"/> shows in the next sample instead.</summary>
     public ChangedValues<T> Changed<T>()
-        where T : struct, IComponent =>
+        where T : struct, IComponent, ITracked =>
         new(world, world.registry.IndexOf<T>(), Since, Until, options);
 
     /// <summary>The rows of <typeparamref name="TRow"/> stamped in the window, each with its owner and key, as <see cref="Changed{T}"/>
     /// is for components: a row added in the window is included, an owner pending destroy or detached is skipped unless the cursor's
-    /// options include it, removals are not seen (the log has them), an <see cref="UntrackedAttribute"/> type or a write inside
-    /// <see cref="World.Untracked"/> stamps none, and a row stamped again after <see cref="Until"/> shows in the next sample instead.
+    /// options include it, removals are not seen, a write inside <see cref="World.Untracked"/> stamps none, and a row stamped again after <see cref="Until"/> shows in the next sample instead.
     /// Only owners with a row stamped after <see cref="Since"/> are visited, and one walk of <typeparamref name="TRow"/> may be open at a
     /// time: starting another before it ends throws.</summary>
     public ChangedRows<TKey, TRow> ChangedRows<TKey, TRow>()
         where TKey : notnull
-        where TRow : struct, IRow<TKey> => new(world, Since, Until, options);
-
-    /// <summary>The key of a <see cref="LogKind.RowAdded"/> or <see cref="LogKind.RowRemoved"/> entry for <typeparamref name="TRow"/>.</summary>
-    public TKey RowKey<TKey, TRow>(in LogEntry entry)
-        where TKey : notnull
-        where TRow : struct, IRow<TKey> =>
-        world.FindRows<TKey, TRow>() is { } store && entry.TypeIndex == store.Type
-            ? store.KeyAt(entry.Detail)
-            : throw new ArgumentException(
-                $"The entry is not a {typeof(TRow).Name} row entry.",
-                nameof(entry)
-            );
-}
-
-/// <summary>The filtered structural-log entries of one <see cref="ChangeSample"/>; enumerate it before the world logs anything more or a cursor commits, either of which can move the entries.</summary>
-public readonly ref struct LogSpan
-{
-    readonly World world;
-    readonly ulong since;
-    readonly ulong until;
-    readonly CursorOptions options;
-
-    internal LogSpan(World world, ulong since, ulong until, CursorOptions options)
-    {
-        this.world = world;
-        this.since = since;
-        this.until = until;
-        this.options = options;
-    }
-
-    /// <summary>Walks the entries oldest first.</summary>
-    public Enumerator GetEnumerator() => new(world, since, until, options);
-
-    /// <summary>Walks a <see cref="LogSpan"/>.</summary>
-    public ref struct Enumerator
-    {
-        readonly World world;
-        readonly StructuralLog log;
-        readonly ulong until;
-        readonly CursorOptions options;
-        int position;
-
-        internal Enumerator(World world, ulong since, ulong until, CursorOptions options)
-        {
-            this.world = world;
-            log = world.changes.log;
-            this.until = until;
-            this.options = options;
-            position = log.FirstAfter(since) - 1;
-        }
-
-        /// <summary>The entry at the current position.</summary>
-        public readonly ref readonly LogEntry Current => ref log.At(position);
-
-        /// <summary>Moves to the next entry in the window that passes the filters; false past the last.</summary>
-        public bool MoveNext()
-        {
-            while (++position < log.End)
-            {
-                ref readonly var entry = ref log.At(position);
-                if (entry.Version > until)
-                    return false;
-                if (Matches(entry))
-                    return true;
-            }
-            return false;
-        }
-
-        readonly bool Matches(in LogEntry entry)
-        {
-            if (entry.TypeIndex < 0)
-                return true;
-            if (
-                options.Components is { Length: > 0 } components
-                && Array.IndexOf(components, entry.TypeIndex) < 0
-            )
-                return false;
-            return options.Categories.Matches(world.registry[entry.TypeIndex].Categories)
-                && world.Admits(entry.Entity, options);
-        }
-    }
+        where TRow : struct, IRow<TKey>, ITracked => new(world, Since, Until, options);
 }
 
 /// <summary>One entity whose value of <typeparamref name="T"/> was stamped inside a sample's window.</summary>
@@ -172,6 +80,7 @@ public readonly ref struct ChangedValues<T>
 
     internal ChangedValues(World world, int type, ulong since, ulong until, CursorOptions options)
     {
+        Debug.Assert(world.registry[type].IsTracked);
         this.world = world;
         this.type = type;
         this.since = since;

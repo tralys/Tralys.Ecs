@@ -206,7 +206,7 @@ public ref struct ChunkView
         var storage = Unsafe.As<SparseStorage<T>>(world.sparse[slot]);
         return new SparseTerm<T>(
             storage,
-            tracking && world.registry[type].IsTracked ? version : 0,
+            tracking && world.registry[type].IsStamped ? version : 0,
             IndexesOf(type),
             BuffersOf(type),
             buffer

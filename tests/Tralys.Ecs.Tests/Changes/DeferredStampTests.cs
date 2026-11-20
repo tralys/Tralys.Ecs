@@ -41,21 +41,21 @@ public sealed class DeferredStampTests
     }
 
     [Test]
-    public async Task An_untracked_sparse_component_never_reads_as_changed()
+    public async Task A_type_not_marked_tracked_carries_no_stamps()
     {
         using var world = TestWorlds.Create();
-        var cursor = world.Changes.Register("untracked");
         var entity = world.Create();
-        world.AdvanceVersion();
-
+        world.Set(entity, new Velocity { X = 1 });
         world.Set(entity, new Footnote { Line = 1 });
-        using (var edit = world.Edit<Footnote>(entity))
-            edit.Value.Line = 2;
+        world.TallyRows(entity).Set(new Tally { Slot = 1, Count = 1 });
 
-        var changed = 0;
-        foreach (var _ in world.Changes.Sample(cursor).Changed<Footnote>())
-            changed++;
-        await Assert.That(changed).IsEqualTo(0);
+        var archetype = world.allocator.Slots[entity.Index].Archetype!;
+        var sparse = world.SparseFor(world.registry.IndexOf<Footnote>());
+        var rows = world.FindRows<int, Tally>()!.BlockOf(entity)!;
+
+        await Assert.That(archetype.TrackedSlot(world.registry.IndexOf<Velocity>())).IsEqualTo(-1);
+        await Assert.That(sparse.Changed.Length + sparse.Added.Length).IsEqualTo(0);
+        await Assert.That(rows.Changed.Length + rows.Added.Length).IsEqualTo(0);
     }
 
     [Test]

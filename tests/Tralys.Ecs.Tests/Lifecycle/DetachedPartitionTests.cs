@@ -51,18 +51,18 @@ public sealed class DetachedPartitionTests
     [Test]
     public async Task A_detach_played_back_moves_the_subtree_after_logging_its_root()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var player = world.Create();
         var bag = world.Create();
         world.SetParent(bag, player);
-        var cursor = world.Changes.Register("partitions");
+        var tail = new LogTail(world);
 
         using (world.BeginDelivery())
             world.Detach(player);
         world.Playback();
 
         var detached = new List<Entity>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Kind == LogKind.Detached)
                 detached.Add(entry.Entity);

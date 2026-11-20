@@ -33,10 +33,10 @@ public sealed class PlaybackOrderTests
     [Test]
     public async Task A_replacement_is_logged_in_operation_order_among_the_playbacks_other_changes()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var entity = world.Create();
         world.Set(entity, new Medal { Rank = 1 });
-        var cursor = world.Changes.Register("log");
+        var tail = new LogTail(world);
 
         var buffer = world.RentBuffer(1, 0);
         buffer.Commands.Set(entity, new Velocity { X = 1 });
@@ -45,15 +45,15 @@ public sealed class PlaybackOrderTests
         world.Playback();
 
         var kinds = new List<LogKind>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
             kinds.Add(entry.Kind);
         await Assert.That(string.Join(" ", kinds)).IsEqualTo("Added Replaced");
     }
 
     static string Run(bool shuffled)
     {
-        using var world = TestWorlds.Create();
-        var cursor = world.Changes.Register("log");
+        using var world = TestWorlds.Logged();
+        var tail = new LogTail(world);
         var moved = world.Create();
         world.Set(moved, new Position());
         var toggled = world.Create();
@@ -70,9 +70,8 @@ public sealed class PlaybackOrderTests
             world.Submit(buffer);
         world.Playback();
 
-        var read = world.Changes.Sample(cursor);
         var log = new List<string>();
-        foreach (var entry in read.Log)
+        foreach (var entry in tail.Read())
             log.Add($"{entry.Kind}:{entry.Entity}:{entry.TypeIndex}");
         return $"{world.Get<Position>(moved).X} {world.Has<Velocity>(toggled)} [{string.Join(" ", log)}]";
     }

@@ -162,7 +162,7 @@ public sealed class CancelDestroyTests
     [Test]
     public async Task A_child_destroyed_in_the_batch_that_spares_its_parent_is_not_logged_spared()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var parent = world.Create();
         world.Set(parent, new Position());
         var child = world.Create();
@@ -170,7 +170,7 @@ public sealed class CancelDestroyTests
         world.Set(child, new Health { Value = 1 });
         world.SetParent(child, parent);
         world.Destroy(parent);
-        var cursor = world.Changes.Register("spared");
+        var tail = new LogTail(world);
 
         var buffer = world.RentBuffer(world.runSequence, 0);
         buffer.Commands.CancelDestroy(parent);
@@ -179,7 +179,7 @@ public sealed class CancelDestroyTests
         world.Playback(finalizeDestroys: false);
 
         var spared = new List<Entity>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Kind == LogKind.DestroyCancelled)
                 spared.Add(entry.Entity);
@@ -190,18 +190,18 @@ public sealed class CancelDestroyTests
     [Test]
     public async Task A_rescue_while_finalising_logs_the_spared_subtree()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var root = world.Create();
         var child = world.Create();
         world.SetParent(child, root);
         world.Observers.OnDestroy(new Rescues(root));
-        var cursor = world.Changes.Register("spared");
+        var tail = new LogTail(world);
 
         world.Destroy(root);
         world.Playback();
 
         var spared = new List<Entity>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Kind == LogKind.DestroyCancelled)
                 spared.Add(entry.Entity);

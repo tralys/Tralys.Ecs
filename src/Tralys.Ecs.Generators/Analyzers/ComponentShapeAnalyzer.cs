@@ -62,6 +62,8 @@ public sealed class ComponentShapeAnalyzer : DiagnosticAnalyzer
         }
 
         var replaceOnly = false;
+        var tracked = false;
+        var relation = false;
         var propagates = false;
         var directed = false;
         var tag = false;
@@ -73,6 +75,10 @@ public sealed class ComponentShapeAnalyzer : DiagnosticAnalyzer
         {
             if (Symbols.IsAttribute(attribute, "Tralys.Ecs.ReplaceOnlyAttribute"))
                 replaceOnly = true;
+            else if (Symbols.IsAttribute(attribute, "Tralys.Ecs.TrackedAttribute"))
+                tracked = true;
+            else if (Symbols.IsAttribute(attribute, Symbols.Relation))
+                relation = true;
             else if (Symbols.IsAttribute(attribute, "Tralys.Ecs.PropagateChangesAttribute"))
             {
                 propagates = true;
@@ -105,6 +111,8 @@ public sealed class ComponentShapeAnalyzer : DiagnosticAnalyzer
                 ? "has [PropagateChanges] with no direction; set ToAncestors, ToRelationSources or both"
             : tag && inherited && !enableable
                 ? "sets Inherited, which only an enableable tag uses; add [Enableable] or drop Inherited"
+            : tracked && (relation || (tag && (sparse || !enableable)))
+                ? "is [Tracked], but a relation, a sparse tag or a tag that is not enableable has no change stamps; drop [Tracked] and watch it with Relation or Presence"
             : null;
         if (invalid is not null)
             context.ReportDiagnostic(

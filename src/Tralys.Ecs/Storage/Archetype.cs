@@ -112,7 +112,7 @@ internal sealed class Archetype
             var column = descriptor.HasColumn ? columns.Count : -1;
             var enable = descriptor.IsEnableable ? enables.Count : -1;
             var track =
-                descriptor.IsTracked && (descriptor.HasColumn || descriptor.IsEnableable)
+                descriptor.IsStamped && (descriptor.HasColumn || descriptor.IsEnableable)
                     ? tracked.Count
                     : -1;
             if (column >= 0)

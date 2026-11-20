@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
@@ -38,7 +39,7 @@ public sealed partial class World
     internal readonly ObserverRegistry observers;
     internal readonly List<ICoreHook> coreHooks = [];
 
-    /// <summary>Per-consumer change cursors over this world's row stamps and structural log.</summary>
+    /// <summary>Per-consumer change cursors over this world's row stamps, and watches over its structural changes.</summary>
     public ChangeTracking Changes => changes;
 
     /// <summary>This world's lifecycle observers; every event reaches them at the next playback point, in operation order.</summary>
@@ -475,7 +476,7 @@ public sealed partial class World
         var storage = (SparseStorage<T>)SparseFor(type);
         ref var cell = ref storage.Add(entity, value, out var at);
         allocator.Slots[entity.Index].SparseCount++;
-        if (Tracking && registry[type].IsTracked)
+        if (Tracking && registry[type].IsStamped)
             storage.StampAdded(at, version);
         Report(
             ComponentChange.Added,
@@ -853,7 +854,7 @@ public sealed partial class World
                 location.Kind = LocationKind.Sparse;
                 location.Sparse = storage;
                 location.Row = at;
-                location.Tracked = registry[type].IsTracked ? 0 : -1;
+                location.Tracked = registry[type].IsStamped ? 0 : -1;
                 return ref Unsafe.As<SparseStorage<T>>(storage!).Values[at];
             }
             case StorageClass.SparseTag:
@@ -879,6 +880,7 @@ public sealed partial class World
         where T : struct
     {
         var type = registry.IndexOf<T>();
+        Debug.Assert(registry[type].IsTracked);
         if (Unsafe.IsNullRef(ref Locate<T>(entity, type, out var location)))
             return 0;
         return location.Kind switch
@@ -915,6 +917,8 @@ public sealed partial class World
         if (storage is not null)
             return storage;
         storage = registry[type].Ops.CreateSparse(type);
+        if (!registry[type].IsStamped)
+            storage.DropStamps();
         if (layout.PropagatesToAncestors[type] || layout.PropagatesToSources[type])
             storage.propagator = this;
         return storage;

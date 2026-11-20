@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Tralys.Ecs;
 
 /// <summary>One row of <typeparamref name="TRow"/> stamped inside a sample's window.</summary>
@@ -48,6 +50,7 @@ public readonly ref struct ChangedRows<TKey, TRow>
 
     internal ChangedRows(World world, ulong since, ulong until, CursorOptions options)
     {
+        Debug.Assert(world.registry[world.registry.IndexOf<TRow>()].IsTracked);
         this.world = world;
         this.since = since;
         this.until = until;

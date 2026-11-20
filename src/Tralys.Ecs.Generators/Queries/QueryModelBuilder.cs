@@ -131,20 +131,6 @@ static class QueryModelBuilder
                     Fail($"'{Symbols.Name(type)}' in a filter is not a declared component or tag");
                     continue;
                 }
-                if (
-                    kind == TermKind.Changed
-                    && (
-                        facts.IsUntracked
-                        || (facts.IsTag && facts.IsSparse)
-                        || (facts.IsTag && !facts.IsEnableable)
-                    )
-                )
-                {
-                    Fail(
-                        $"'{Symbols.Name(type)}' carries no change stamps, so Changed can never match"
-                    );
-                    continue;
-                }
                 terms.Add(
                     new TermModel(
                         Symbols.Full(type),

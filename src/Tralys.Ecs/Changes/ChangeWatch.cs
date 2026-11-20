@@ -1,22 +1,24 @@
+using System.Runtime.InteropServices;
+
 namespace Tralys.Ecs;
 
 /// <summary>A change cursor that turns its declared inputs into marks on the entities owing work: it samples, routes each change through
-/// its <see cref="Hop"/>, marks the whole of an entity back from detached, pending destroy or a restore, marks everything when its log was
-/// trimmed, forgets destroyed entities and commits, so its consumer never walks the log itself.</summary>
+/// its <see cref="Hop"/>, marks the whole of an entity back from detached, pending destroy or a restore, marks everything when its queue
+/// overflowed or the world was reset to a snapshot, forgets destroyed entities and commits, so its consumer never walks the changes
+/// itself.</summary>
 public sealed class ChangeWatch<TBits> : IDisposable
     where TBits : unmanaged, Enum
 {
     readonly World world;
     readonly CursorId cursor;
+    internal readonly WatchQueue queue;
     readonly WatchInput[] inputs;
     readonly WatchInput[]?[] byType;
-    readonly (QueryDesc Owners, ulong Bits)[] descendants;
-    readonly Dictionary<Entity, ulong>[] seen;
+    readonly (Func<World, Entity, bool> Holds, ulong Bits)[] owners;
     readonly Action<World, ChangeSet<TBits>> everything;
     readonly Func<World, Entity, TBits> whole;
     readonly List<Entity> holders = [];
     readonly List<Entity> routed = [];
-    Dictionary<Entity, ulong> fresh = [];
 
     internal ChangeWatch(
         World world,
@@ -30,16 +32,19 @@ public sealed class ChangeWatch<TBits> : IDisposable
         this.everything = everything;
         this.whole = whole;
         inputs = [.. builder.Inputs];
-        descendants = [.. builder.Owners];
-        seen = new Dictionary<Entity, ulong>[descendants.Length];
-        for (var i = 0; i < seen.Length; i++)
-            seen[i] = [];
+        owners = [.. builder.Owners];
 
         var types = inputs.Select(input => input.Type).Distinct().ToArray();
         byType = new WatchInput[]?[types.Length == 0 ? 0 : types.Max() + 1];
+        var kinds = new LogKinds[byType.Length];
         foreach (var type in types)
+        {
             byType[type] = [.. inputs.Where(input => input.Type == type)];
-        cursor = world.Changes.Register(name, new CursorOptions(CategoryMask.All, types));
+            foreach (var input in byType[type]!)
+                kinds[type] |= input.Entries;
+        }
+        cursor = world.Changes.Register(name);
+        queue = world.changes.Subscribe(cursor, kinds, owners.Length > 0);
     }
 
     /// <summary>Marks into <paramref name="into"/> what changed since the last collect, and forgets each entity destroyed since.</summary>
@@ -47,7 +52,7 @@ public sealed class ChangeWatch<TBits> : IDisposable
     {
         var changes = world.Changes;
         var sample = changes.Sample(cursor);
-        if (sample.Status == CursorStatus.Expired)
+        if (queue.Overflowed)
             everything(world, into);
         else
         {
@@ -61,31 +66,40 @@ public sealed class ChangeWatch<TBits> : IDisposable
                 holders.Clear();
             }
 
-            foreach (ref readonly var entry in sample.Log)
+            foreach (ref readonly var change in CollectionsMarshal.AsSpan(queue.Events))
             {
-                if (entry.TypeIndex >= 0)
+                if (change.Type >= 0)
                 {
-                    if (entry.TypeIndex < byType.Length && byType[entry.TypeIndex] is { } typed)
+                    if (byType[change.Type] is { } typed && world.Admits(change.Entity, default))
                         foreach (var input in typed)
-                            if ((input.Entries & (1u << (int)entry.Kind)) != 0)
-                                Route(in input, entry.Entity, into);
+                            if (input.Entries.Has(change.Kind))
+                                Route(in input, change.Entity, into);
                 }
-                else if (
-                    entry.Kind is LogKind.Reattached or LogKind.DestroyCancelled or LogKind.Restored
-                )
-                    Mark(into, entry.Entity, ChangeSet<TBits>.Bits(whole(world, entry.Entity)));
-                else if (entry.Kind is LogKind.Destroyed or LogKind.Extracted)
-                    into.Forget(entry.Entity);
+                else if (WatchQueue.Resyncs.Has(change.Kind))
+                    Mark(into, change.Entity, ChangeSet<TBits>.Bits(whole(world, change.Entity)));
+                else
+                    into.Forget(change.Entity);
+            }
+
+            foreach (var owner in queue.Raised)
+            {
+                if (!world.Exists(owner) || !world.Admits(owner, default))
+                    continue;
+                foreach (var (holds, bits) in owners)
+                    if (holds(world, owner))
+                        Mark(into, owner, bits);
             }
         }
-
-        for (var i = 0; i < descendants.Length; i++)
-            ScanDescendants(i, into);
+        queue.Clear();
         changes.Commit(cursor, sample.Until);
     }
 
-    /// <summary>Unregisters the watch's cursor, so it no longer holds the log back; the watch is dead from then on.</summary>
-    public void Dispose() => world.Changes.Unregister(cursor);
+    /// <summary>Unregisters the watch's cursor and stops its queue; the watch is dead from then on.</summary>
+    public void Dispose()
+    {
+        world.changes.Unsubscribe(queue);
+        world.Changes.Unregister(cursor);
+    }
 
     void Route(in WatchInput input, Entity holder, ChangeSet<TBits> into)
     {
@@ -100,24 +114,6 @@ public sealed class ChangeWatch<TBits> : IDisposable
         foreach (var entity in routed)
             Mark(into, entity, input.Bits);
         routed.Clear();
-    }
-
-    void ScanDescendants(int index, ChangeSet<TBits> into)
-    {
-        var (owners, bits) = descendants[index];
-        var last = seen[index];
-        foreach (var chunk in world.Query(owners))
-        foreach (var row in chunk.Rows)
-        {
-            var owner = chunk.Entities[row];
-            var version = world.Changes.DescendantVersionOf(owner);
-            if (!last.TryGetValue(owner, out var was) || was != version)
-                Mark(into, owner, bits);
-            fresh[owner] = version;
-        }
-        last.Clear();
-        seen[index] = fresh;
-        fresh = last;
     }
 
     void Mark(ChangeSet<TBits> into, Entity entity, ulong bits)

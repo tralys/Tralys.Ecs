@@ -181,8 +181,6 @@ static class Symbols
                 facts.IsEnableable = true;
             else if (IsAttribute(attribute, "Tralys.Ecs.ReplaceOnlyAttribute"))
                 facts.IsReplaceOnly = true;
-            else if (IsAttribute(attribute, "Tralys.Ecs.UntrackedAttribute"))
-                facts.IsUntracked = true;
             else if (IndexKindOf(attribute) is not null)
                 facts.IsIndexed = true;
             else if (IsAttribute(attribute, "Tralys.Ecs.PropagateChangesAttribute"))
@@ -356,7 +354,6 @@ sealed class ComponentFacts
     public bool IsSparse;
     public bool IsEnableable;
     public bool IsReplaceOnly;
-    public bool IsUntracked;
     public bool IsIndexed;
     public bool PropagatesChanges;
     public bool OwnsBuffers;

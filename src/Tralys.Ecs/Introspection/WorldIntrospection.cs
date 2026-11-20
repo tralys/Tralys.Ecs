@@ -11,16 +11,6 @@ public interface IComponentVisitor
         where T : struct;
 }
 
-/// <summary>Structural-log retention: retained entries and the registered cursors, of which <see cref="Expired"/> fell behind the trim
-/// point. <see cref="Oldest"/> is the slowest cursor, the one holding the log back.</summary>
-public readonly record struct LogStats(
-    int Length,
-    int Cursors,
-    int Expired,
-    CursorId? Oldest,
-    ulong OldestSince
-);
-
 /// <summary>One archetype: its component types, entities and chunk use.</summary>
 public readonly struct ArchetypeInfo
 {
@@ -139,8 +129,9 @@ public readonly struct WorldIntrospection
     /// <summary>Every cached query the world has created.</summary>
     public QueryEnumerable Queries => new(world.liveQueries);
 
-    /// <summary>Structural-log retention and cursor lag, computed when read.</summary>
-    public LogStats Log => world.changes.Stats();
+    /// <summary>Rises whenever the world changes in a way a <see cref="LogKind"/> names, except an overwrite of a
+    /// <see cref="ReplaceOnlyAttribute"/> component, and stays put otherwise; how far one change moves it is unspecified.</summary>
+    public long StructuralChanges => world.changes.structuralChanges;
 
     /// <summary>Chunks a query run handed to its body, since the world was created.</summary>
     public long ChunksVisited => world.chunksVisited;

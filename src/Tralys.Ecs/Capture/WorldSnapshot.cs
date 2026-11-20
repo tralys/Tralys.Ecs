@@ -102,9 +102,9 @@ public sealed partial class World
     }
 
     /// <summary>Rewinds this world to <paramref name="baseline"/>: the same handles, values, stamps and change version, so the next tick
-    /// runs as it did after the snapshot. Cost follows the stored data, not the work done since. Change cursors read
-    /// <see cref="CursorStatus.Expired"/> once, observers are not called, and attachments get <see cref="IWorldAttachment.OnWorldRestored"/>
-    /// in attach order. Commands not yet played back are dropped, so a reset also recovers a world left mid-tick by an exception.</summary>
+    /// runs as it did after the snapshot. Cost follows the stored data, not the work done since. A change cursor's next sample starts at
+    /// version 0 and each <see cref="ChangeWatch{TBits}"/> marks everything at its next collect, observers are not called, and attachments
+    /// get <see cref="IWorldAttachment.OnWorldRestored"/> in attach order. Commands not yet played back are dropped, so a reset also recovers a world left mid-tick by an exception.</summary>
     /// <exception cref="ArgumentException">The snapshot was taken from another world.</exception>
     /// <exception cref="InvalidOperationException">An iteration is still open.</exception>
     [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
@@ -159,7 +159,6 @@ public sealed partial class World
             else
                 relations[i] = saved.Clone();
         }
-        changes.journals.Clear();
         for (var i = 0; i < rowStores.Length; i++)
         {
             if (baseline.Rows[i] is not { } saved)
@@ -171,8 +170,6 @@ public sealed partial class World
                 live.Load(saved);
             else
                 rowStores[i] = saved.Clone();
-            if (rowStores[i] is { } store)
-                changes.journals.Add(store);
         }
         contested.Clear();
         for (var i = 0; i < indexStores.Length; i++)

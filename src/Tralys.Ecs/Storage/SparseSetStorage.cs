@@ -15,6 +15,7 @@ internal abstract class SparseStorage
     public int Count;
     public int Moves;
     public readonly int Type;
+    public bool Stamped { get; private set; } = true;
 
     internal World? propagator;
 
@@ -22,7 +23,13 @@ internal abstract class SparseStorage
 
     public abstract SparseStorage Clone();
 
-    // The owner, stamp and value arrays grow together, so they keep one length.
+    public void DropStamps()
+    {
+        Stamped = false;
+        Changed = Added = [];
+    }
+
+    // The owner, value and, when stamped, stamp arrays grow together, so they keep one length.
     public void Load(SparseStorage source)
     {
         Copies.LoadPages(ref pages, source.pages, PageSize);
@@ -30,13 +37,19 @@ internal abstract class SparseStorage
         {
             var length = source.Owners.Length;
             Owners = new Entity[length];
-            Changed = new ulong[length];
-            Added = new ulong[length];
+            if (Stamped)
+            {
+                Changed = new ulong[length];
+                Added = new ulong[length];
+            }
             GrowValues(length);
         }
         Copies.Load(ref Owners, source.Owners, source.Count);
-        Copies.Load(ref Changed, source.Changed, source.Count);
-        Copies.Load(ref Added, source.Added, source.Count);
+        if (Stamped)
+        {
+            Copies.Load(ref Changed, source.Changed, source.Count);
+            Copies.Load(ref Added, source.Added, source.Count);
+        }
         LoadValues(source);
         Count = source.Count;
         Moves++;
@@ -76,8 +89,11 @@ internal abstract class SparseStorage
         if (Count == Owners.Length)
         {
             Array.Resize(ref Owners, Count * 2);
-            Array.Resize(ref Changed, Count * 2);
-            Array.Resize(ref Added, Count * 2);
+            if (Stamped)
+            {
+                Array.Resize(ref Changed, Count * 2);
+                Array.Resize(ref Added, Count * 2);
+            }
             GrowValues(Count * 2);
         }
         var slot = Count++;
@@ -97,14 +113,20 @@ internal abstract class SparseStorage
         {
             MoveValue(last, slot);
             Owners[slot] = Owners[last];
-            Changed[slot] = Changed[last];
-            Added[slot] = Added[last];
+            if (Stamped)
+            {
+                Changed[slot] = Changed[last];
+                Added[slot] = Added[last];
+            }
             pages[Owners[slot].Index >> PageBits]![Owners[slot].Index & (PageSize - 1)] = slot + 1;
         }
         ClearValue(last);
         Owners[last] = default;
-        Changed[last] = 0;
-        Added[last] = 0;
+        if (Stamped)
+        {
+            Changed[last] = 0;
+            Added[last] = 0;
+        }
         pages[index >> PageBits]![index & (PageSize - 1)] = 0;
         Count--;
         Moves++;
@@ -118,8 +140,11 @@ internal abstract class SparseStorage
             pages[Owners[i].Index >> PageBits]![Owners[i].Index & (PageSize - 1)] = 0;
             ClearValue(i);
             Owners[i] = default;
-            Changed[i] = 0;
-            Added[i] = 0;
+        }
+        if (Stamped)
+        {
+            Array.Clear(Changed, 0, Count);
+            Array.Clear(Added, 0, Count);
         }
         Count = 0;
         Moves++;
@@ -149,6 +174,8 @@ internal sealed class SparseStorage<T> : SparseStorage
     public override SparseStorage Clone()
     {
         var copy = new SparseStorage<T>(Type) { propagator = propagator };
+        if (!Stamped)
+            copy.DropStamps();
         copy.Load(this);
         return copy;
     }

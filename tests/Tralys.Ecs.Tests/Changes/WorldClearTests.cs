@@ -11,15 +11,10 @@ public sealed class WorldClearTests
         var entity = world.Create();
         world.Set(entity, new Position { X = 1 });
 
-        var read = world.Changes.Sample(cursor);
-        var entries = 0;
-        foreach (var entry in read.Log)
-            entries++;
         var rows = 0;
-        foreach (var row in read.Changed<Position>())
+        foreach (var row in world.Changes.Sample(cursor).Changed<Position>())
             rows++;
 
-        await Assert.That(entries).IsEqualTo(2);
         await Assert.That(rows).IsEqualTo(1);
     }
 

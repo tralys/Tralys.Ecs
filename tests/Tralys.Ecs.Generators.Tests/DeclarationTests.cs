@@ -26,6 +26,23 @@ public sealed class DeclarationTests
     }
 
     [Test]
+    public async Task Tracked_is_an_error_only_on_a_type_with_nothing_to_stamp()
+    {
+        var diagnostics = await Analyze(
+            """
+            namespace App;
+            [Tralys.Ecs.Relation, Tralys.Ecs.Tracked] public partial struct Follows;
+            [Tralys.Ecs.Tag, Tralys.Ecs.Storage(Tralys.Ecs.StorageKind.Sparse), Tralys.Ecs.Tracked] public partial struct Marked;
+            [Tralys.Ecs.Tag, Tralys.Ecs.Tracked] public partial struct Plain;
+            [Tralys.Ecs.Tag, Tralys.Ecs.Enableable, Tralys.Ecs.Tracked] public partial struct Stunned;
+            [Tralys.Ecs.Component, Tralys.Ecs.Tracked] public partial struct Health { public int Value; }
+            """
+        );
+
+        await Assert.That(diagnostics.Count(id => id == "TECS0042")).IsEqualTo(3);
+    }
+
+    [Test]
     public async Task Entities_inside_a_buffer_of_another_element_type_are_an_error()
     {
         GeneratorHarness.Compile(

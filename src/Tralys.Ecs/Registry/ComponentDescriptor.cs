@@ -26,8 +26,8 @@ public enum ComponentTraits
     /// <summary>No options.</summary>
     None = 0,
 
-    /// <summary><see cref="UntrackedAttribute"/>: writes carry no change stamps.</summary>
-    Untracked = 1 << 0,
+    /// <summary><see cref="TrackedAttribute"/>: writes carry change stamps.</summary>
+    Tracked = 1 << 0,
 
     /// <summary><see cref="EnableableAttribute"/>: each row carries an enable bit.</summary>
     Enableable = 1 << 1,
@@ -234,8 +234,19 @@ public sealed class ComponentDescriptor
     /// <summary>Whether the type is a tag.</summary>
     public bool IsTag => info.Kind == DescriptorKind.Tag;
 
-    /// <summary>Whether writes carry change stamps: the type is not <see cref="UntrackedAttribute"/>.</summary>
-    public bool IsTracked => (info.Traits & ComponentTraits.Untracked) == 0;
+    /// <summary>Whether writes carry change stamps that readers may read: the type is <see cref="TrackedAttribute"/>.</summary>
+    public bool IsTracked => (info.Traits & ComponentTraits.Tracked) != 0;
+
+    // A propagating write raises versions from inside the stamp call, so it needs a stamp slot even when nothing reads it.
+    internal bool IsStamped =>
+        (
+            info.Traits
+            & (
+                ComponentTraits.Tracked
+                | ComponentTraits.PropagateToAncestors
+                | ComponentTraits.PropagateToRelationSources
+            )
+        ) != 0;
 
     /// <summary>Whether each row carries an enable bit.</summary>
     public bool IsEnableable => (info.Traits & ComponentTraits.Enableable) != 0;

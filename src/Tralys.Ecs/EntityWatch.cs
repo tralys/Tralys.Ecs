@@ -18,7 +18,7 @@ public enum WatchResult
 
 /// <summary>Watches one entity's component. Keyed by the full handle, so a recycled slot reads as <see cref="WatchResult.EntityGone"/>.</summary>
 public struct EntityWatch<T>(Entity entity)
-    where T : struct, IComponent
+    where T : struct, IComponent, ITracked
 {
     ulong seen;
 

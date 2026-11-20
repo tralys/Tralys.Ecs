@@ -56,8 +56,10 @@ public sealed partial class PartitionDeterminismTests
     // Chunk partials of 1e8, 1, -1e8 and 1 sum to 1 only when combined in chunk order.
     static string Run(IChunkExecutor executor)
     {
-        using var world = TestWorlds.Create(new WorldOptions { Executor = executor });
-        var cursor = world.Changes.Register("log");
+        using var world = TestWorlds.Create(
+            new WorldOptions { Executor = executor, AttributedLogCapacity = 1 << 12 }
+        );
+        var tail = new LogTail(world);
         for (var i = 0; i < 128; i++)
         {
             var entity = world.Create();
@@ -85,7 +87,7 @@ public sealed partial class PartitionDeterminismTests
         RunDumpHealth(world, text);
         world.BadgeByNumber().TryGet(1000, out var holder);
         text.Append($"| badge 1000: {holder} | ");
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
             text.Append($"{entry.Kind}:{entry.Entity}:{entry.TypeIndex} ");
         return text.ToString();
     }

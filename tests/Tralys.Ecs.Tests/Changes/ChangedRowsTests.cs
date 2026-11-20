@@ -159,7 +159,6 @@ public sealed class ChangedRowsTests
     {
         using var world = TestWorlds.Create();
         var seeded = world.Create();
-        var counted = world.Create();
         world.EffectRows(seeded).Set(new Effect { Kind = 1 });
         var cursor = world.Changes.Register("rows");
 
@@ -169,15 +168,10 @@ public sealed class ChangedRowsTests
             using var edit = world.EffectRows(seeded).Edit(1);
             edit.Value.Stacks = 3;
         }
-        world.TallyRows(counted).Set(new Tally { Slot = 1, Count = 1 });
-        using (var edit = world.TallyRows(counted).Edit(1))
-            edit.Value.Count = 2;
 
         var sample = world.Changes.Sample(cursor);
         var reported = new List<Entity>();
         foreach (var row in sample.ChangedRows<int, Effect>())
-            reported.Add(row.Entity);
-        foreach (var row in sample.ChangedRows<int, Tally>())
             reported.Add(row.Entity);
 
         await Assert.That(reported).IsEmpty();

@@ -5,10 +5,10 @@ public sealed class FoldLogTests
     [Test]
     public async Task Folding_cancels_only_what_did_not_exist_before_playback()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var entity = world.Create();
         world.Set(entity, new Velocity { X = 1 });
-        var cursor = world.Changes.Register("log");
+        var tail = new LogTail(world);
 
         using (world.BeginDelivery())
         {
@@ -21,7 +21,7 @@ public sealed class FoldLogTests
 
         var kinds = new List<LogKind>();
         var positionEntries = 0;
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Is<Velocity>())
                 kinds.Add(entry.Kind);
@@ -47,11 +47,11 @@ public sealed class FoldLogTests
     [Test]
     public async Task Remove_add_remove_of_an_existing_component_folds_to_one_removal()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var entity = world.Create();
         world.Set(entity, new Burning { Ticks = 1 });
         world.Observers.OnAdd(new IgnoresAdds());
-        var cursor = world.Changes.Register("log");
+        var tail = new LogTail(world);
 
         using (world.BeginDelivery())
         {
@@ -63,7 +63,7 @@ public sealed class FoldLogTests
         world.Playback();
 
         var kinds = new List<LogKind>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Is<Burning>())
                 kinds.Add(entry.Kind);

@@ -39,7 +39,7 @@ public partial struct Frozen;
 Each declaration can take options:
 
 - Storage and presence: `[Enableable]`, `[Storage(StorageKind.Sparse)]`, `[Singleton]`, `[ReplaceOnly]`.
-- Change tracking: `[Untracked]`, `[PropagateChanges(...)]`.
+- Change tracking: `[Tracked]`, `[PropagateChanges(...)]`.
 - Indexes: `[UniqueIndex]`, `[MultiIndex]`, `[OrderedIndex]`.
 
 `[Relation]` declares an edge type, and `[Rows]` with a `[RowKey]` field declares keyed rows owned by an entity. A
@@ -122,9 +122,9 @@ A handle is usable while `IsLive`: it exists, and neither it nor an ancestor is 
 
 ## Changes, capture and threading
 
-- `world.Changes` hands out cursors: `Sample(cursor).Changed<T>()` and `ChangedRows<TKey, TRow>()` report what was
-  stamped since the cursor's last commit. `Changes.Watch<TBits, TScope>` turns stamps and log entries into per-entity
-  work across declared hops.
+- `world.Changes` hands out cursors: `Sample(cursor).Changed<T>()` and `ChangedRows<TKey, TRow>()` report what a
+  `[Tracked]` type stamped since the cursor's last commit. `Changes.Watch<TBits, TScope>` turns stamps and the structural
+  changes it asks for into per-entity work across declared hops, each watch holding only its own.
 - `world.Observers` notifies add, remove, replace and destroy observers. An enable reaches them as an add and a
   disable as a removal. An immediate write reports at once; a playback reports each component's net change over the
   batch.

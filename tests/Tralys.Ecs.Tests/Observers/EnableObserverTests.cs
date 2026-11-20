@@ -173,15 +173,15 @@ public sealed class EnableObserverTests
         using var source = TestWorlds.Create();
         var entity = Disabled(source, 3);
         var image = source.Capture([entity]);
-        using var target = TestWorlds.Create();
+        using var target = TestWorlds.Logged();
         var records = Watch(target);
-        var cursor = target.Changes.Register("restore");
+        var tail = new LogTail(target);
 
         target.Restore(image);
         target.Playback();
 
         var kinds = new List<LogKind>();
-        foreach (var entry in target.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Is<Burning>())
                 kinds.Add(entry.Kind);

@@ -32,20 +32,20 @@ public sealed class RelationPayloadTests
     [Test]
     public async Task Relating_an_existing_edge_with_a_new_payload_logs_and_notifies_the_change()
     {
-        using var world = TestWorlds.Create();
+        using var world = TestWorlds.Logged();
         var debtor = world.Create();
         var creditor = world.Create();
         world.Relate(debtor, creditor, new Owes { Amount = 5 });
         var observer = new RecordsChanges();
         world.Observers.OnRelation(observer);
-        var cursor = world.Changes.Register("log");
+        var tail = new LogTail(world);
 
         world.Relate(debtor, creditor, new Owes { Amount = 5 });
         world.Relate(debtor, creditor, new Owes { Amount = 7 });
         world.Playback();
 
         var logged = new List<(LogKind, Entity, Entity)>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Is<Owes>())
                 logged.Add((entry.Kind, entry.Entity, entry.Other));

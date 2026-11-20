@@ -87,7 +87,7 @@ public sealed class ChangeModelTests
 
     static (Model[] Start, World World, Entity[] Entities) Arrange(Random random)
     {
-        var world = TestWorlds.Create();
+        var world = TestWorlds.Logged();
         var start = new Model[2];
         var entities = new Entity[2];
         for (var e = 0; e < 2; e++)
@@ -108,19 +108,19 @@ public sealed class ChangeModelTests
         return (start, world, entities);
     }
 
-    static (Hears Hears, CursorId Cursor) Watch(World world, Entity[] entities)
+    static (Hears Hears, LogTail Tail) Watch(World world, Entity[] entities)
     {
         var hears = new Hears { Entities = entities };
         world.Observers.OnAdd(hears);
         world.Observers.OnRemove(hears);
         world.Observers.OnReplace(hears);
-        return (hears, world.Changes.Register("model"));
+        return (hears, new LogTail(world));
     }
 
-    static List<string> Logged(World world, CursorId cursor, Entity[] entities)
+    static List<string> Logged(LogTail tail, Entity[] entities)
     {
         var logged = new List<string>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Is<Seal>())
                 logged.Add($"e{Array.IndexOf(entities, entry.Entity)}:{entry.Kind}");
@@ -182,7 +182,7 @@ public sealed class ChangeModelTests
             var (start, world, entities) = Arrange(random);
             using var _ = world;
             var steps = Steps(random, start);
-            var (hears, cursor) = Watch(world, entities);
+            var (hears, tail) = Watch(world, entities);
             var model = (Model[])start.Clone();
             var heard = new List<string>();
             var logged = new List<string>();
@@ -216,7 +216,7 @@ public sealed class ChangeModelTests
                 heard,
                 hears.Seen,
                 logged,
-                Logged(world, cursor, entities),
+                Logged(tail, entities),
                 Final(model),
                 Final(world, entities),
                 mismatches
@@ -236,7 +236,7 @@ public sealed class ChangeModelTests
             var (start, world, entities) = Arrange(random);
             using var _ = world;
             var steps = Steps(random, start);
-            var (hears, cursor) = Watch(world, entities);
+            var (hears, tail) = Watch(world, entities);
             var model = (Model[])start.Clone();
             var removed = new bool[entities.Length];
             var order = new List<int>();
@@ -306,7 +306,7 @@ public sealed class ChangeModelTests
                 heard,
                 hears.Seen,
                 logged,
-                Logged(world, cursor, entities),
+                Logged(tail, entities),
                 Final(model),
                 Final(world, entities),
                 mismatches
@@ -328,7 +328,7 @@ public sealed class ChangeModelTests
             var (start, world, entities) = Arrange(random);
             using var _ = world;
             var steps = Steps(random, start);
-            var (hears, cursor) = Watch(world, entities);
+            var (hears, tail) = Watch(world, entities);
             var storage = (Model[])start.Clone();
             var logical = (Model[])start.Clone();
             var pending = new bool[entities.Length];
@@ -423,7 +423,7 @@ public sealed class ChangeModelTests
                 heard,
                 hears.Seen,
                 logged,
-                Logged(world, cursor, entities),
+                Logged(tail, entities),
                 Final(logical),
                 Final(world, entities),
                 mismatches

@@ -86,7 +86,7 @@ public sealed class QueryDescBuilder
 
     /// <summary>Matches rows whose <typeparamref name="T"/> changed since this query last ran to completion in the world.</summary>
     public QueryDescBuilder Changed<T>()
-        where T : struct, IComponent => Add<T>(TermKind.Changed, false);
+        where T : struct, IComponent, ITracked => Add<T>(TermKind.Changed, false);
 
     /// <summary>Also matches entities whose destroy is pending.</summary>
     public QueryDescBuilder IncludePendingDestroy()

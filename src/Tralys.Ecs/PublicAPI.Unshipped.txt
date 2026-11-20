@@ -26,7 +26,6 @@ override Tralys.Ecs.IndexConflict.GetHashCode() -> int
 override Tralys.Ecs.IndexConflict.ToString() -> string!
 override Tralys.Ecs.LifecycleReason.GetHashCode() -> int
 override Tralys.Ecs.LogEntry.GetHashCode() -> int
-override Tralys.Ecs.LogStats.GetHashCode() -> int
 override Tralys.Ecs.ObserverId.GetHashCode() -> int
 override Tralys.Ecs.PassthroughUse.Equals(object? obj) -> bool
 override Tralys.Ecs.PassthroughUse.GetHashCode() -> int
@@ -110,8 +109,6 @@ static Tralys.Ecs.LifecycleReason.operator ==(Tralys.Ecs.LifecycleReason left, T
 static Tralys.Ecs.LifecycleReason.Restored.get -> Tralys.Ecs.LifecycleReason
 static Tralys.Ecs.LogEntry.operator !=(Tralys.Ecs.LogEntry left, Tralys.Ecs.LogEntry right) -> bool
 static Tralys.Ecs.LogEntry.operator ==(Tralys.Ecs.LogEntry left, Tralys.Ecs.LogEntry right) -> bool
-static Tralys.Ecs.LogStats.operator !=(Tralys.Ecs.LogStats left, Tralys.Ecs.LogStats right) -> bool
-static Tralys.Ecs.LogStats.operator ==(Tralys.Ecs.LogStats left, Tralys.Ecs.LogStats right) -> bool
 static Tralys.Ecs.ObserverId.operator !=(Tralys.Ecs.ObserverId left, Tralys.Ecs.ObserverId right) -> bool
 static Tralys.Ecs.ObserverId.operator ==(Tralys.Ecs.ObserverId left, Tralys.Ecs.ObserverId right) -> bool
 static Tralys.Ecs.PassthroughUse.operator !=(Tralys.Ecs.PassthroughUse? left, Tralys.Ecs.PassthroughUse? right) -> bool
@@ -289,10 +286,7 @@ Tralys.Ecs.ChangeSample
 Tralys.Ecs.ChangeSample.Changed<T>() -> Tralys.Ecs.ChangedValues<T>
 Tralys.Ecs.ChangeSample.ChangedRows<TKey, TRow>() -> Tralys.Ecs.ChangedRows<TKey, TRow>
 Tralys.Ecs.ChangeSample.ChangeSample() -> void
-Tralys.Ecs.ChangeSample.Log.get -> Tralys.Ecs.LogSpan
-Tralys.Ecs.ChangeSample.RowKey<TKey, TRow>(in Tralys.Ecs.LogEntry entry) -> TKey
 Tralys.Ecs.ChangeSample.Since.get -> ulong
-Tralys.Ecs.ChangeSample.Status.get -> Tralys.Ecs.CursorStatus
 Tralys.Ecs.ChangeSample.Until.get -> ulong
 Tralys.Ecs.ChangeTracking
 Tralys.Ecs.ChangeTracking.AddedVersionOf<T>(Tralys.Ecs.Entity entity) -> ulong
@@ -417,7 +411,6 @@ Tralys.Ecs.ComponentTraits.PropagateToRelationSources = 32 -> Tralys.Ecs.Compone
 Tralys.Ecs.ComponentTraits.ReplaceOnly = 4 -> Tralys.Ecs.ComponentTraits
 Tralys.Ecs.ComponentTraits.ReverseKeyIndex = 256 -> Tralys.Ecs.ComponentTraits
 Tralys.Ecs.ComponentTraits.Singleton = 8 -> Tralys.Ecs.ComponentTraits
-Tralys.Ecs.ComponentTraits.Untracked = 1 -> Tralys.Ecs.ComponentTraits
 Tralys.Ecs.ConflictPolicy
 Tralys.Ecs.ConflictPolicy.KeepExisting = 1 -> Tralys.Ecs.ConflictPolicy
 Tralys.Ecs.ConflictPolicy.ReplaceExisting = 2 -> Tralys.Ecs.ConflictPolicy
@@ -426,21 +419,12 @@ Tralys.Ecs.CursorId
 Tralys.Ecs.CursorId.CursorId() -> void
 Tralys.Ecs.CursorId.Equals(Tralys.Ecs.CursorId other) -> bool
 Tralys.Ecs.CursorOptions
-Tralys.Ecs.CursorOptions.Categories.get -> Tralys.Ecs.CategoryMask
-Tralys.Ecs.CursorOptions.Categories.init -> void
-Tralys.Ecs.CursorOptions.Components.get -> int[]?
-Tralys.Ecs.CursorOptions.Components.init -> void
 Tralys.Ecs.CursorOptions.CursorOptions() -> void
-Tralys.Ecs.CursorOptions.CursorOptions(Tralys.Ecs.CategoryMask Categories, int[]? Components = null) -> void
-Tralys.Ecs.CursorOptions.Deconstruct(out Tralys.Ecs.CategoryMask Categories, out int[]? Components) -> void
 Tralys.Ecs.CursorOptions.Equals(Tralys.Ecs.CursorOptions other) -> bool
 Tralys.Ecs.CursorOptions.IncludeDetached.get -> bool
 Tralys.Ecs.CursorOptions.IncludeDetached.init -> void
 Tralys.Ecs.CursorOptions.IncludePendingDestroy.get -> bool
 Tralys.Ecs.CursorOptions.IncludePendingDestroy.init -> void
-Tralys.Ecs.CursorStatus
-Tralys.Ecs.CursorStatus.Expired = 1 -> Tralys.Ecs.CursorStatus
-Tralys.Ecs.CursorStatus.Ok = 0 -> Tralys.Ecs.CursorStatus
 Tralys.Ecs.DanglingReference
 Tralys.Ecs.DanglingReference.DanglingReference() -> void
 Tralys.Ecs.DanglingReference.DanglingReference(Tralys.Ecs.Entity Holder, Tralys.Ecs.ComponentDescriptor! Type, Tralys.Ecs.ReferenceHolder Kind, int Offset, int Element, string? Field, Tralys.Ecs.Entity Target) -> void
@@ -815,28 +799,6 @@ Tralys.Ecs.LogKind.DestroyCancelled = 17 -> Tralys.Ecs.LogKind
 Tralys.Ecs.LogKind.RowAdded = 14 -> Tralys.Ecs.LogKind
 Tralys.Ecs.LogKind.RowRemoved = 15 -> Tralys.Ecs.LogKind
 Tralys.Ecs.LogKind.Unrelated = 11 -> Tralys.Ecs.LogKind
-Tralys.Ecs.LogSpan
-Tralys.Ecs.LogSpan.Enumerator
-Tralys.Ecs.LogSpan.Enumerator.Current.get -> Tralys.Ecs.LogEntry
-Tralys.Ecs.LogSpan.Enumerator.Enumerator() -> void
-Tralys.Ecs.LogSpan.Enumerator.MoveNext() -> bool
-Tralys.Ecs.LogSpan.GetEnumerator() -> Tralys.Ecs.LogSpan.Enumerator
-Tralys.Ecs.LogSpan.LogSpan() -> void
-Tralys.Ecs.LogStats
-Tralys.Ecs.LogStats.Cursors.get -> int
-Tralys.Ecs.LogStats.Cursors.init -> void
-Tralys.Ecs.LogStats.Deconstruct(out int Length, out int Cursors, out int Expired, out Tralys.Ecs.CursorId? Oldest, out ulong OldestSince) -> void
-Tralys.Ecs.LogStats.Equals(Tralys.Ecs.LogStats other) -> bool
-Tralys.Ecs.LogStats.Expired.get -> int
-Tralys.Ecs.LogStats.Expired.init -> void
-Tralys.Ecs.LogStats.Length.get -> int
-Tralys.Ecs.LogStats.Length.init -> void
-Tralys.Ecs.LogStats.LogStats() -> void
-Tralys.Ecs.LogStats.LogStats(int Length, int Cursors, int Expired, Tralys.Ecs.CursorId? Oldest, ulong OldestSince) -> void
-Tralys.Ecs.LogStats.Oldest.get -> Tralys.Ecs.CursorId?
-Tralys.Ecs.LogStats.Oldest.init -> void
-Tralys.Ecs.LogStats.OldestSince.get -> ulong
-Tralys.Ecs.LogStats.OldestSince.init -> void
 Tralys.Ecs.Lookup<T>
 Tralys.Ecs.Lookup<T>.Find(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Optional<T>
 Tralys.Ecs.Lookup<T>.Get(Tralys.Ecs.Entity entity) -> T
@@ -1055,14 +1017,12 @@ Tralys.Ecs.Rows<TKey, TRow>.Enumerator.Dispose() -> void
 Tralys.Ecs.Rows<TKey, TRow>.Enumerator.Enumerator() -> void
 Tralys.Ecs.Rows<TKey, TRow>.Enumerator.MoveNext() -> bool
 Tralys.Ecs.Rows<TKey, TRow>.Enumerator.RemoveCurrent(string! file = "", int line = 0) -> void
-Tralys.Ecs.Rows<TKey, TRow>.Enumerator.Version.get -> ulong
 Tralys.Ecs.Rows<TKey, TRow>.Find(in TKey key) -> Tralys.Ecs.Optional<TRow>
 Tralys.Ecs.Rows<TKey, TRow>.GetEnumerator() -> Tralys.Ecs.Rows<TKey, TRow>.Enumerator
 Tralys.Ecs.Rows<TKey, TRow>.Remove(in TKey key, string! file = "", int line = 0) -> bool
 Tralys.Ecs.Rows<TKey, TRow>.Rows() -> void
 Tralys.Ecs.Rows<TKey, TRow>.Set(in TRow row, string! file = "", int line = 0) -> void
 Tralys.Ecs.Rows<TKey, TRow>.TryGet(in TKey key, out TRow row) -> bool
-Tralys.Ecs.Rows<TKey, TRow>.VersionOf(in TKey key) -> ulong
 Tralys.Ecs.RowsAttribute
 Tralys.Ecs.RowsAttribute.PresenceMask.get -> bool
 Tralys.Ecs.RowsAttribute.PresenceMask.set -> void
@@ -1177,8 +1137,6 @@ Tralys.Ecs.UnresolvedPolicy
 Tralys.Ecs.UnresolvedPolicy.Defer = 1 -> Tralys.Ecs.UnresolvedPolicy
 Tralys.Ecs.UnresolvedPolicy.Fail = 2 -> Tralys.Ecs.UnresolvedPolicy
 Tralys.Ecs.UnresolvedPolicy.Null = 0 -> Tralys.Ecs.UnresolvedPolicy
-Tralys.Ecs.UntrackedAttribute
-Tralys.Ecs.UntrackedAttribute.UntrackedAttribute() -> void
 Tralys.Ecs.UntrackedScope
 Tralys.Ecs.UntrackedScope.Dispose() -> void
 Tralys.Ecs.UntrackedScope.UntrackedScope() -> void
@@ -1351,7 +1309,6 @@ Tralys.Ecs.WorldIntrospection.ChunksSkipped.get -> long
 Tralys.Ecs.WorldIntrospection.ChunksVisited.get -> long
 Tralys.Ecs.WorldIntrospection.Components.get -> System.ReadOnlySpan<Tralys.Ecs.ComponentDescriptor!>
 Tralys.Ecs.WorldIntrospection.LastPlayback.get -> Tralys.Ecs.PlaybackStats
-Tralys.Ecs.WorldIntrospection.Log.get -> Tralys.Ecs.LogStats
 Tralys.Ecs.WorldIntrospection.MeanChunkFill.get -> double
 Tralys.Ecs.WorldIntrospection.Queries.get -> Tralys.Ecs.WorldIntrospection.QueryEnumerable
 Tralys.Ecs.WorldIntrospection.QueryEnumerable
@@ -1375,8 +1332,6 @@ Tralys.Ecs.WorldOptions.ChunkCapacity.init -> void
 Tralys.Ecs.WorldOptions.Equals(Tralys.Ecs.WorldOptions other) -> bool
 Tralys.Ecs.WorldOptions.Executor.get -> Tralys.Ecs.IChunkExecutor?
 Tralys.Ecs.WorldOptions.Executor.init -> void
-Tralys.Ecs.WorldOptions.LogRetentionCap.get -> int
-Tralys.Ecs.WorldOptions.LogRetentionCap.init -> void
 Tralys.Ecs.WorldOptions.VerifyReferences.get -> bool
 Tralys.Ecs.WorldOptions.VerifyReferences.init -> void
 Tralys.Ecs.WorldOptions.WorldOptions() -> void
@@ -1406,8 +1361,6 @@ virtual Tralys.Ecs.SystemBase.BindLookups(Tralys.Ecs.World! world) -> void
 ~override Tralys.Ecs.LifecycleReason.ToString() -> string
 ~override Tralys.Ecs.LogEntry.Equals(object obj) -> bool
 ~override Tralys.Ecs.LogEntry.ToString() -> string
-~override Tralys.Ecs.LogStats.Equals(object obj) -> bool
-~override Tralys.Ecs.LogStats.ToString() -> string
 ~override Tralys.Ecs.ObserverId.Equals(object obj) -> bool
 ~override Tralys.Ecs.ObserverId.ToString() -> string
 ~override Tralys.Ecs.PlaybackStats.Equals(object obj) -> bool
@@ -1459,7 +1412,16 @@ Tralys.Ecs.IWatchScope<TBits>.Everything(Tralys.Ecs.World! world, Tralys.Ecs.Cha
 Tralys.Ecs.IWatchScope<TBits>.Whole(Tralys.Ecs.World! world, Tralys.Ecs.Entity entity) -> TBits
 Tralys.Ecs.WatchBuilder<TBits>
 Tralys.Ecs.WatchBuilder<TBits>.Component<T>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
-Tralys.Ecs.WatchBuilder<TBits>.Descendants(TBits bits, Tralys.Ecs.QueryDesc! owners) -> Tralys.Ecs.WatchBuilder<TBits>!
 Tralys.Ecs.WatchBuilder<TBits>.Relation<R>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
 Tralys.Ecs.WatchBuilder<TBits>.Rows<TKey, TRow>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
 Tralys.Ecs.ChangeWatch<TBits>.Dispose() -> void
+Tralys.Ecs.ChangeTracking.VersionOf<TKey, TRow>(Tralys.Ecs.Entity owner, in TKey key) -> ulong
+Tralys.Ecs.ComponentTraits.Tracked = 1 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ITracked
+Tralys.Ecs.TrackedAttribute
+Tralys.Ecs.TrackedAttribute.TrackedAttribute() -> void
+Tralys.Ecs.WatchBuilder<TBits>.Descendants<TOwner>(TBits bits) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WatchBuilder<TBits>.Presence<T>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WorldIntrospection.StructuralChanges.get -> long
+Tralys.Ecs.WorldOptions.WatchQueueCap.get -> int
+Tralys.Ecs.WorldOptions.WatchQueueCap.init -> void

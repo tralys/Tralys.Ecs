@@ -20,6 +20,8 @@ internal sealed class HierarchyStore
     readonly Stack<int> free = new();
     readonly ListArena<Entity> children = new();
 
+    public ChangeTracking? Raises;
+
     public bool IsEmpty => live == 0;
 
     // Never cleared: until the first node exists, no archetype row holds an ancestor bit.
@@ -126,11 +128,13 @@ internal sealed class HierarchyStore
         for (var parent = ParentOf(entity); !parent.IsDefault; parent = ParentOf(parent))
         {
             ref var node = ref Find(parent);
-            if (
-                Unsafe.IsNullRef(ref node)
-                || Versions.Max(ref node.DescendantVersion, version) >= version
-            )
+            if (Unsafe.IsNullRef(ref node))
                 return;
+            var prior = Versions.Max(ref node.DescendantVersion, version);
+            if (prior >= version)
+                return;
+            if (Raises is { TakesRaises: true } raises)
+                raises.Raised(parent, prior);
         }
     }
 

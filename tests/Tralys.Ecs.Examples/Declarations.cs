@@ -1,6 +1,6 @@
 namespace Tralys.Ecs.Examples;
 
-[Component]
+[Component, Tracked]
 public partial struct Position
 {
     public float X;

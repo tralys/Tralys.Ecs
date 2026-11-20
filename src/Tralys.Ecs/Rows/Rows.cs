@@ -58,16 +58,6 @@ public readonly ref struct Rows<TKey, TRow>
         return ref Unsafe.NullRef<TRow>();
     }
 
-    /// <summary>The row's changed version: when it was added or last changed.</summary>
-    [Effect(Effects.None)]
-    public ulong VersionOf(in TKey key)
-    {
-        var store = Store;
-        return store?.BlockOf(entity) is { } block && store.Find(block, key) is var at and >= 0
-            ? block.Changed[at]
-            : 0;
-    }
-
     /// <summary>The row for <paramref name="key"/>, which must exist. The edit stamps the row on dispose only if its value changed. While the
     /// edit is open, the entity's rows of this type cannot be added or removed.</summary>
     /// <exception cref="InvalidOperationException">The entity has no row for <paramref name="key"/>.</exception>
@@ -210,9 +200,6 @@ public readonly ref struct Rows<TKey, TRow>
 
         /// <summary>The current row by <c>ref readonly</c>.</summary>
         public readonly ref readonly TRow Current => ref block!.Rows[index];
-
-        /// <summary>The current row's changed version: when it was added or last changed.</summary>
-        public readonly ulong Version => block!.Changed[index];
 
         /// <summary>Advances to the next row not removed; false when none is left.</summary>
         [Effect(Effects.None)]

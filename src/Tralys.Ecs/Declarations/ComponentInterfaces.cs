@@ -23,6 +23,9 @@ public interface IEnableable : IComponent;
 /// <summary>Implemented by the generator on every <see cref="SingletonAttribute"/> component and tag; the world's singleton accessors take one.</summary>
 public interface ISingleton : IComponent;
 
+/// <summary>Implemented by the generator on every <see cref="TrackedAttribute"/> type; every reader of change stamps takes one.</summary>
+public interface ITracked : IDeclared;
+
 /// <summary>Implemented by the generator on <see cref="RelationAttribute"/> structs.</summary>
 public interface IRelation : IDeclared;
 

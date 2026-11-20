@@ -20,8 +20,8 @@ public sealed class SparseRecycleTests
     [Test]
     public async Task A_cancelled_creation_logs_nothing_and_frees_a_clean_slot()
     {
-        using var world = TestWorlds.Create();
-        var cursor = world.Changes.Register("log");
+        using var world = TestWorlds.Logged();
+        var tail = new LogTail(world);
         Entity transient;
         using (world.BeginDelivery())
         {
@@ -32,7 +32,7 @@ public sealed class SparseRecycleTests
         world.Playback();
 
         var log = new List<LogKind>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             if (entry.Entity == transient)
                 log.Add(entry.Kind);

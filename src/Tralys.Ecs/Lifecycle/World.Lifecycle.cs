@@ -11,6 +11,9 @@ public sealed partial class World
     byte[] gathered = [];
     const byte Gathered = 1;
     const byte Reached = 2;
+
+    static readonly LogKinds SpawnReports = LogKinds.Of(LogKind.Added);
+
     readonly List<BundleInfo?> bundles = [];
     internal bool extracting;
 
@@ -104,10 +107,12 @@ public sealed partial class World
             ClaimSingleton(entity, type);
         if (Tracking)
             archetype.StampAddedAll(row, version);
-        if (changes.Logging || observers.AnyAdd)
+        if (observers.AnyAdd || changes.WantsAny(SpawnReports))
         {
             foreach (var type in info.SignatureTypes)
             {
+                if (!observers.AnyAdd && !changes.Wants(type, SpawnReports))
+                    continue;
                 var column = archetype.ColumnSlot(type);
                 Report(
                     ComponentChange.Added,

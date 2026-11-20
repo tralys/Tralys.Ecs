@@ -1183,7 +1183,7 @@ public sealed partial class World
     // A spared root's subtree is only final once every fold has applied: a descendant destroyed in the same batch must not log as spared.
     void LogSparedFolds(Span<CommandRecord> records)
     {
-        if (!changes.Logging)
+        if (!changes.Wants(-1, LogKind.DestroyCancelled))
             return;
         var log = attributed;
         for (var f = 0; f < foldCount; f++)
@@ -1337,7 +1337,7 @@ public sealed partial class World
                 ref var incoming = ref buffersById[state.Buffer]
                     .Payload(type)
                     .RowRef(state.Payload);
-                var stamp = track && descriptor.IsTracked;
+                var stamp = track && descriptor.IsStamped;
                 int at;
                 if (!state.Before)
                 {

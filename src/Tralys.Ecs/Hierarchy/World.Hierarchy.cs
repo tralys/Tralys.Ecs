@@ -149,7 +149,9 @@ public sealed partial class World
             RaiseDescendants(child, version);
             return;
         }
-        var wasPending = changes.Logging && StateOf(child) == LifecycleState.PendingDestroy;
+        var wasPending =
+            changes.Wants(-1, LogKind.DestroyCancelled)
+            && StateOf(child) == LifecycleState.PendingDestroy;
         hierarchy.Ensure(child);
         if (!parent.IsDefault)
             hierarchy.Ensure(parent);
@@ -180,7 +182,7 @@ public sealed partial class World
     // Every caller passes a root that was pending destroy, so each entity found no longer pending was spared.
     internal void LogSpared(Entity root, HashSet<Entity>? logged = null)
     {
-        if (!changes.Logging)
+        if (!changes.Wants(-1, LogKind.DestroyCancelled))
             return;
         var count = 0;
         Push(ref count, root);

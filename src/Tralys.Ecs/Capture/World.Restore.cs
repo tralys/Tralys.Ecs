@@ -58,6 +58,8 @@ public sealed partial class World
 
 internal sealed class Restorer
 {
+    static readonly LogKinds RestoreReports = LogKinds.Of(LogKind.Added, LogKind.Disabled);
+
     readonly World world;
     readonly CaptureImage image;
     readonly RestoreOptions options;
@@ -194,7 +196,8 @@ internal sealed class Restorer
     void RestorePage(CapturePage page, Array[] columns)
     {
         var target = world.ArchetypeFor(world.root.Signature.WithAll(page.Types, page.Detached));
-        var logged = world.changes.Logging || world.observers.AnyAdd;
+        var hearAdds = world.observers.AnyAdd;
+        var logged = hearAdds || world.changes.WantsAny(RestoreReports);
         for (var r = 0; r < page.Locals.Length; r++)
         {
             var entity = Created[page.Locals[r]];
@@ -235,6 +238,8 @@ internal sealed class Restorer
                 continue;
             foreach (var type in page.Types)
             {
+                if (!hearAdds && !world.changes.Wants(type, RestoreReports))
+                    continue;
                 var enable = target.EnableSlot(type);
                 var column = target.ColumnSlot(type);
                 world.Report(
@@ -258,7 +263,7 @@ internal sealed class Restorer
     {
         var storage = world.SparseFor(record.Type);
         var size = registry[record.Type].Column.Size;
-        var tracked = world.Tracking && registry[record.Type].IsTracked;
+        var tracked = world.Tracking && registry[record.Type].IsStamped;
         for (var k = 0; k < record.Locals.Length; k++)
         {
             var entity = Created[record.Locals[k]];

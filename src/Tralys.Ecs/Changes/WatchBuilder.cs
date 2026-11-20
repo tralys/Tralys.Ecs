@@ -7,14 +7,14 @@ public sealed class WatchBuilder<TBits>
 {
     readonly Registry registry;
     internal readonly List<WatchInput> Inputs = [];
-    internal readonly List<(QueryDesc Owners, ulong Bits)> Owners = [];
+    internal readonly List<(Func<World, Entity, bool> Holds, ulong Bits)> Owners = [];
 
     internal WatchBuilder(Registry registry) => this.registry = registry;
 
     /// <summary>Owes <paramref name="bits"/> where <typeparamref name="T"/> was written, added, removed, enabled or disabled. A write
-    /// or add inside <see cref="World.Untracked"/> stamps nothing and is not reported, except a tag's add, which only the log carries.</summary>
+    /// or add inside <see cref="World.Untracked"/> stamps nothing and is not reported, except a tag's add, which only the structural changes carry.</summary>
     public WatchBuilder<TBits> Component<T>(TBits bits, Hop hop = default)
-        where T : struct, IComponent =>
+        where T : struct, IComponent, ITracked =>
         Add(
             registry.IndexOf<T>(),
             ChangedHolders<T>.Collect,
@@ -27,11 +27,11 @@ public sealed class WatchBuilder<TBits>
     /// A write or add inside <see cref="World.Untracked"/> stamps nothing and is not reported.</summary>
     public WatchBuilder<TBits> Rows<TKey, TRow>(TBits bits, Hop hop = default)
         where TKey : notnull
-        where TRow : struct, IRow<TKey> =>
+        where TRow : struct, IRow<TKey>, ITracked =>
         Add(
             registry.IndexOf<TRow>(),
             ChangedOwners<TKey, TRow>.Collect,
-            Entries(LogKind.RowRemoved),
+            LogKinds.Of(LogKind.RowRemoved),
             bits,
             hop
         );
@@ -43,40 +43,39 @@ public sealed class WatchBuilder<TBits>
         Add(
             registry.IndexOf<R>(),
             null,
-            Entries(LogKind.Related, LogKind.Unrelated, LogKind.RelationChanged),
+            LogKinds.Of(LogKind.Related, LogKind.Unrelated, LogKind.RelationChanged),
             bits,
             hop
         );
 
-    /// <summary>Owes <paramref name="bits"/> on each entity <paramref name="owners"/> matches whose descendants changed as
-    /// <see cref="ChangeTracking.DescendantVersionOf"/> counts it, a descendant leaving included; the first collect marks every one.</summary>
-    public WatchBuilder<TBits> Descendants(TBits bits, QueryDesc owners)
+    /// <summary>Owes <paramref name="bits"/> where <typeparamref name="T"/> was added, removed, enabled or disabled, from the structural
+    /// changes alone, so <typeparamref name="T"/> needs no stamps; value writes are not seen.</summary>
+    public WatchBuilder<TBits> Presence<T>(TBits bits, Hop hop = default)
+        where T : struct, IComponent => Add(registry.IndexOf<T>(), null, TagEntries, bits, hop);
+
+    /// <summary>Owes <paramref name="bits"/> on each entity holding <typeparamref name="TOwner"/> whose
+    /// <see cref="ChangeTracking.DescendantVersionOf"/> rose since the last collect, a descendant leaving included. An owner pending
+    /// destroy or detached when the watch collects is skipped, and one gaining <typeparamref name="TOwner"/> is not marked for it.</summary>
+    public WatchBuilder<TBits> Descendants<TOwner>(TBits bits)
+        where TOwner : struct, IComponent
     {
-        Owners.Add((owners, ChangeSet<TBits>.Bits(bits)));
+        Owners.Add((OwnerTest<TOwner>.Holds, ChangeSet<TBits>.Bits(bits)));
         return this;
     }
 
-    // Stamps carry adds and writes and leave out a write inside Untracked(); the log adds only what no stamp can say.
-    static readonly uint ComponentEntries = Entries(
+    // Stamps carry adds and writes and leave out a write inside Untracked(); the structural changes add only what no stamp can say.
+    static readonly LogKinds ComponentEntries = LogKinds.Of(
         LogKind.Removed,
         LogKind.Enabled,
         LogKind.Disabled
     );
 
-    static readonly uint TagEntries = ComponentEntries | Entries(LogKind.Added);
-
-    static uint Entries(params LogKind[] kinds)
-    {
-        var mask = 0u;
-        foreach (var kind in kinds)
-            mask |= 1u << (int)kind;
-        return mask;
-    }
+    static readonly LogKinds TagEntries = ComponentEntries | LogKinds.Of(LogKind.Added);
 
     WatchBuilder<TBits> Add(
         int type,
         WatchInput.Collector? changed,
-        uint entries,
+        LogKinds entries,
         TBits bits,
         Hop hop
     )
@@ -85,8 +84,15 @@ public sealed class WatchBuilder<TBits>
         return this;
     }
 
+    static class OwnerTest<TOwner>
+        where TOwner : struct, IComponent
+    {
+        public static readonly Func<World, Entity, bool> Holds = (world, entity) =>
+            world.Has<TOwner>(entity);
+    }
+
     static class ChangedHolders<T>
-        where T : struct, IComponent
+        where T : struct, IComponent, ITracked
     {
         public static readonly WatchInput.Collector Collect = Run;
 
@@ -99,7 +105,7 @@ public sealed class WatchBuilder<TBits>
 
     static class ChangedOwners<TKey, TRow>
         where TKey : notnull
-        where TRow : struct, IRow<TKey>
+        where TRow : struct, IRow<TKey>, ITracked
     {
         public static readonly WatchInput.Collector Collect = Run;
 
@@ -114,7 +120,7 @@ public sealed class WatchBuilder<TBits>
 readonly record struct WatchInput(
     int Type,
     WatchInput.Collector? Changed,
-    uint Entries,
+    LogKinds Entries,
     ulong Bits,
     Action<World, Entity, List<Entity>>? Route
 )

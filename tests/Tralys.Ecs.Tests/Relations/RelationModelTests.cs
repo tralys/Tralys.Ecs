@@ -10,8 +10,8 @@ public sealed class RelationModelTests
 
     static string? Run(int seed, int steps)
     {
-        using var world = TestWorlds.Create();
-        var cursor = world.Changes.Register("model");
+        using var world = TestWorlds.Create(new WorldOptions { AttributedLogCapacity = 1 << 16 });
+        var tail = new LogTail(world);
         var random = new Random(seed);
         var model = new Model();
         var live = new List<Entity>();
@@ -78,14 +78,14 @@ public sealed class RelationModelTests
             if (model.Mismatch(world, live) is { } problem)
                 return $"step {step}: {problem}";
         }
-        return Replay(world, cursor, live);
+        return Replay(world, tail, live);
     }
 
-    static string? Replay(World world, CursorId cursor, List<Entity> live)
+    static string? Replay(World world, LogTail tail, List<Entity> live)
     {
         var edges = new Dictionary<int, Edges>();
         var parents = new Dictionary<Entity, Entity>();
-        foreach (var entry in world.Changes.Sample(cursor).Log)
+        foreach (var entry in tail.Read())
         {
             switch (entry.Kind)
             {
