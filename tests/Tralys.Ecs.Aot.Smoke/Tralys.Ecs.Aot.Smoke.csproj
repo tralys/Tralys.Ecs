@@ -3,10 +3,14 @@
     <PublishAot>true</PublishAot>
     <PublishDocumentationFile>false</PublishDocumentationFile>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <IlcInstructionSet>x86-64-v3</IlcInstructionSet>
     <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+    <_SmokeTargetRid>$(RuntimeIdentifier)</_SmokeTargetRid>
+    <_SmokeTargetRid Condition="'$(_SmokeTargetRid)' == ''"
+      >$(NETCoreSdkPortableRuntimeIdentifier)</_SmokeTargetRid
+    >
+    <IlcInstructionSet Condition="$(_SmokeTargetRid.EndsWith('-x64'))">x86-64-v3</IlcInstructionSet>
   </PropertyGroup>
 
   <ItemGroup>

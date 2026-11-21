@@ -14,7 +14,15 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            rid: linux-x64
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
       DOTNET_NOLOGO: true
@@ -26,6 +34,7 @@ jobs:
           global-json-file: global.json
 
       - name: Format
+        if: matrix.rid == 'linux-x64'
         run: |
           dotnet tool restore
           dotnet csharpier check .
@@ -46,4 +55,4 @@ jobs:
       - name: AOT smoke
         run: |
           dotnet publish tests/Tralys.Ecs.Aot.Smoke -c Release
-          tests/Tralys.Ecs.Aot.Smoke/bin/Release/net11.0/linux-x64/publish/Tralys.Ecs.Aot.Smoke
+          tests/Tralys.Ecs.Aot.Smoke/bin/Release/net11.0/${{ matrix.rid }}/publish/Tralys.Ecs.Aot.Smoke
