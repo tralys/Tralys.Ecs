@@ -843,7 +843,7 @@ public sealed partial class World
         {
             case StorageClass.Column:
             {
-                var archetype = slot.Archetype!;
+                var archetype = slot.Placed;
                 var column = archetype.ColumnSlot(state.Type);
                 return ref column >= 0
                     ? ref archetype.RowRef(column, slot.Row)
@@ -851,7 +851,7 @@ public sealed partial class World
             }
             case StorageClass.Sparse:
             {
-                var storage = sparse[layout.SparseSlot[state.Type]]!;
+                var storage = StoredSparse(state.Type);
                 return ref storage.RowRef(storage.SlotOf(entity.Index));
             }
         }
@@ -1132,7 +1132,7 @@ public sealed partial class World
             }
             else if (fold.Source != fold.Target)
                 MoveTo(entity, ref slot, target);
-            var archetype = slot.Archetype!;
+            var archetype = slot.Placed;
             if (fold.Partition >= 0)
                 slot.DetachedSelf = fold.Partition == 1;
             if (fold.PartitionEmission >= 0)
@@ -1615,12 +1615,12 @@ public sealed partial class World
         {
             case StorageClass.Column:
             {
-                var archetype = slot.Archetype!;
+                var archetype = slot.Placed;
                 return ref archetype.RowRef(archetype.ColumnSlot(type), slot.Row);
             }
             case StorageClass.Sparse:
             {
-                var storage = sparse[layout.SparseSlot[type]]!;
+                var storage = StoredSparse(type);
                 return ref storage.RowRef(storage.SlotOf(entity.Index));
             }
         }

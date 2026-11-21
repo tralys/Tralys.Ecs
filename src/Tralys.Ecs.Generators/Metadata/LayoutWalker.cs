@@ -145,12 +145,14 @@ sealed class LayoutWalker(
                 a.AttributeClass?.ToDisplayString()
                 == "System.Runtime.CompilerServices.InlineArrayAttribute"
             );
-        if (attribute is null || attribute.ConstructorArguments.Length != 1)
+        if (
+            attribute is null
+            || attribute.ConstructorArguments.Length != 1
+            || attribute.ConstructorArguments[0].Value is not int length
+        )
             return null;
         var element = InstanceFields(type).FirstOrDefault();
-        return element is null
-            ? null
-            : ((int)attribute.ConstructorArguments[0].Value!, element.Type);
+        return element is null ? null : (length, element.Type);
     }
 
     public static bool ContainsEntity(ITypeSymbol type, int depth) =>

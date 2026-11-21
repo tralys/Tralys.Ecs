@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -15,6 +16,13 @@ internal struct EntitySlot
     public int Row;
     public LifecycleReason DestroyReason;
     public ushort SparseCount;
+
+    public readonly Archetype Placed => Archetype ?? ThrowUnplaced();
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static Archetype ThrowUnplaced() =>
+        throw new InvalidOperationException("The entity has no archetype: it is reserved or dead.");
 }
 
 // The free list is FIFO so two worlds running the same operations hand out the same handles.

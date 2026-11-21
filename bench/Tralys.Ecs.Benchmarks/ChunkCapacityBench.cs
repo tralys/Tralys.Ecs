@@ -4,7 +4,7 @@ namespace Tralys.Ecs.Benchmarks;
 
 public class ChunkCapacityBench
 {
-    World world = null!;
+    World? world;
     readonly List<Entity> live = [];
 
     [Params(16, 32, 64)]
@@ -12,6 +12,12 @@ public class ChunkCapacityBench
 
     [Params("narrow", "player", "wide")]
     public string Shape = "narrow";
+
+    World Built =>
+        world
+        ?? throw new InvalidOperationException(
+            "Setup builds the world at the Capacity under test."
+        );
 
     [GlobalSetup]
     public void Setup()
@@ -24,25 +30,25 @@ public class ChunkCapacityBench
     Entity Spawn() =>
         Shape switch
         {
-            "narrow" => world.Create(new NarrowBundle()),
-            "player" => world.Create(new PlayerBundle()),
-            _ => world.Create(new WideBundle()),
+            "narrow" => Built.Create(new NarrowBundle()),
+            "player" => Built.Create(new PlayerBundle()),
+            _ => Built.Create(new WideBundle()),
         };
 
     [GlobalCleanup]
-    public void Cleanup() => world.Dispose();
+    public void Cleanup() => world?.Dispose();
 
     [Benchmark]
-    public float Iterate() => Bench.SumPositions(world);
+    public float Iterate() => Bench.SumPositions(Built);
 
     [Benchmark]
     public void Churn()
     {
         for (var i = 0; i < 64; i++)
         {
-            world.Destroy(live[i]);
+            Built.Destroy(live[i]);
             live[i] = Spawn();
         }
-        world.Playback();
+        Built.Playback();
     }
 }

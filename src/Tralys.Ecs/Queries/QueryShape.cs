@@ -206,15 +206,19 @@ internal sealed class ArchetypeMatch
         ChangedTracked = [.. changed];
         WordGroups =
         [
-            .. shape
-                .Groups.Where(g => !g.HasSparse)
-                .Select(g =>
-                    g.Members.Select(m => Source(m, shape))
-                        .Where(s => s is not null)
-                        .Select(s => s!.Value)
-                        .ToArray()
-                ),
+            .. shape.Groups.Where(g => !g.HasSparse).Select(g => Sources(g.Members, shape)),
         ];
+    }
+
+    WordSource[] Sources(int[] members, QueryShape shape)
+    {
+        var sources = new List<WordSource>(members.Length);
+        foreach (var member in members)
+        {
+            if (Source(member, shape) is { } source)
+                sources.Add(source);
+        }
+        return [.. sources];
     }
 
     WordSource? Source(int term, QueryShape shape)

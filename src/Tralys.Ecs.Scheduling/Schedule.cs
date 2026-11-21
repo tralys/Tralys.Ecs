@@ -165,7 +165,7 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
         var type = declaration.Sets[set];
         var ran = false;
         observer.RunSet(type, Work(tick, ref ran, ScheduledWorkKind.Set, start, end, null));
-        CheckRan(ran, type.Name);
+        CheckRan(observer, ran, type.Name);
     }
 
     void RunSetSteps(in TTick tick, int start, int end)
@@ -183,7 +183,7 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
             if (step.IsSystem)
                 Skipped(slots[step.Slot], SystemSkip.Condition);
             else
-                Play(tick, step.Name!, step.FinalizesDestroys);
+                Play(tick, step.Name, step.FinalizesDestroys);
         }
     }
 
@@ -191,7 +191,7 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
     {
         ref readonly var step = ref plan.Steps[index];
         if (!step.IsSystem)
-            Play(tick, step.Name!, step.FinalizesDestroys);
+            Play(tick, step.Name, step.FinalizesDestroys);
         else if (RunSlot(tick, slots[step.Slot]) && world.PlaybackOwed)
             Play(tick, slots[step.Slot].PlaybackPoint, false);
     }
@@ -208,7 +208,7 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
             point,
             Work(tick, ref ran, ScheduledWorkKind.Playback, finalizeDestroys ? 1 : 0, 0, point)
         );
-        CheckRan(ran, point);
+        CheckRan(observer, ran, point);
     }
 
     // With a sink, a failing playback is reported and the tick goes on; without one it propagates.
@@ -249,7 +249,7 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
                     slot.Descriptor,
                     Work(tick, ref ran, ScheduledWorkKind.System, slot.Index, 0, null)
                 );
-                CheckRan(ran, slot.Descriptor.Name);
+                CheckRan(observer, ran, slot.Descriptor.Name);
             }
             return true;
         }
@@ -360,17 +360,17 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
             case ScheduledWorkKind.System:
                 Execute(typed, slots[first]);
                 break;
-            default:
-                Playback(point!, first != 0);
+            case ScheduledWorkKind.Playback when point is not null:
+                Playback(point, first != 0);
                 break;
         }
     }
 
-    void CheckRan(bool ran, string work)
+    static void CheckRan(IScheduleObserver observer, bool ran, string work)
     {
         if (!ran)
             throw new InvalidOperationException(
-                $"{observer!.GetType().Name} returned without running {work}; an observer runs every work it is handed once."
+                $"{observer.GetType().Name} returned without running {work}; an observer runs every work it is handed once."
             );
     }
 }

@@ -207,7 +207,8 @@ public sealed partial class World
         if (guardTargets)
             CheckTargetPolicy(entity);
         MarkPendingDestroy(entity, ref slot, reason);
-        attributed?.TagDestroy(entity.Index, CurrentTag());
+        if (attributed is { } log)
+            log.TagDestroy(entity.Index, log.Current(currentSystem));
         RefreshAllIndexes(entity);
         if (hierarchy.HasChildren(entity))
             RefreshChildren(entity);

@@ -71,10 +71,10 @@ public readonly ref struct ChangedRows<TKey, TRow>
         readonly ulong until;
         readonly CursorOptions options;
         RowStore<TKey, TRow>.Block? block;
+        RowStore<TKey, TRow>? walking;
         int older;
         int row;
         ulong stamp;
-        bool open;
 
         internal Enumerator(World world, ulong since, ulong until, CursorOptions options)
         {
@@ -84,17 +84,15 @@ public readonly ref struct ChangedRows<TKey, TRow>
             this.options = options;
             store = world.FindRows<TKey, TRow>();
             older = store?.BeginWalk() ?? -1;
-            open = store is not null;
+            walking = store;
             row = -1;
         }
 
         /// <summary>Ends the walk, so another walk of <typeparamref name="TRow"/> may start; a second dispose does nothing.</summary>
         public void Dispose()
         {
-            if (!open)
-                return;
-            open = false;
-            store!.EndWalk();
+            walking?.EndWalk();
+            walking = null;
         }
 
         /// <summary>The row at the current position.</summary>
@@ -102,7 +100,9 @@ public readonly ref struct ChangedRows<TKey, TRow>
         {
             get
             {
-                ref var value = ref block!.Rows[row];
+                if (block is null)
+                    return default;
+                ref var value = ref block.Rows[row];
                 return new(block.Owner, value.RowKey, ref value, block.Added[row] > since, stamp);
             }
         }
@@ -129,9 +129,9 @@ public readonly ref struct ChangedRows<TKey, TRow>
         bool NextBlock()
         {
             block = null;
-            while (older >= 0)
+            while (older >= 0 && store is not null)
             {
-                var next = store!.At(older);
+                var next = store.At(older);
                 if (next.MaxChanged <= since)
                     break;
                 older = next.Older;

@@ -1339,7 +1339,6 @@ Tralys.Ecs.WorldScratch
 Tralys.Ecs.WorldScratch.Rent<T>(int minimumLength) -> Tralys.Ecs.ScratchBuffer<T>
 Tralys.Ecs.WorldSnapshot
 Tralys.Ecs.WorldSnapshot.EntityCount.get -> int
-Tralys.Ecs.WorldSnapshot.WorldSnapshot() -> void
 virtual Tralys.Ecs.SystemBase.BindLookups(Tralys.Ecs.World! world) -> void
 ~override Tralys.Ecs.AttributedLogEntry.Equals(object obj) -> bool
 ~override Tralys.Ecs.AttributedLogEntry.ToString() -> string

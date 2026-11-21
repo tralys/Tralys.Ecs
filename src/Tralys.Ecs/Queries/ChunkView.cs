@@ -414,13 +414,20 @@ public readonly ref struct SparseTerm<T>
 
     internal ref T FindSlot(Entity entity, out int slot)
     {
-        slot = storage?.SlotOf(entity.Index) ?? -1;
-        return ref slot < 0 ? ref Unsafe.NullRef<T>() : ref storage!.Values[slot];
+        if (storage is null || storage.SlotOf(entity.Index) is not (var at and >= 0))
+        {
+            slot = -1;
+            return ref Unsafe.NullRef<T>();
+        }
+        slot = at;
+        return ref storage.Values[at];
     }
 
     internal void Release(int slot, in T before)
     {
-        ref var value = ref storage!.Values[slot];
+        if (storage is null)
+            return;
+        ref var value = ref storage.Values[slot];
         if (
             ComponentOpsOf<T>.Equals(
                 ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in before)),

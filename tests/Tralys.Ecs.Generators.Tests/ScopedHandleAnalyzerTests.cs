@@ -124,10 +124,11 @@ public sealed class ScopedHandleAnalyzerTests
     }
 
     static string Line(Diagnostic diagnostic) =>
-        diagnostic
-            .Location.SourceTree!.GetText()
-            .Lines[diagnostic.Location.GetLineSpan().StartLinePosition.Line]
-            .ToString();
+        diagnostic.Location.SourceTree is { } tree
+            ? tree.GetText()
+                .Lines[diagnostic.Location.GetLineSpan().StartLinePosition.Line]
+                .ToString()
+            : $"(no source: {diagnostic.Id})";
 
     static async Task<ImmutableArray<Diagnostic>> Analyze(DiagnosticAnalyzer analyzer, string body)
     {

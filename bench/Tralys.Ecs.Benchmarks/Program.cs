@@ -15,7 +15,6 @@ if (args is ["--probe"])
     var due = new DueRatioBench { DuePerTick = 100 };
     due.Setup();
     var schedule = new ScheduleTickBench();
-    schedule.Setup();
     var introspection = new IntrospectionBench();
     introspection.Setup();
     var results = new (string Name, long Bytes)[]

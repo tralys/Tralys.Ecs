@@ -12,7 +12,7 @@ public partial class IndexBench
     const int Count = 10_000;
     const int Moved = 1_000;
 
-    World world = null!;
+    readonly World world = Bench.World();
     readonly Dictionary<int, Entity> byKey = [];
     Entity[] entities = [];
     int[] probes = [];
@@ -21,7 +21,6 @@ public partial class IndexBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         entities = new Entity[Count];
         for (var i = 0; i < Count; i++)
         {

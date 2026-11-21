@@ -9,7 +9,7 @@ public partial class DueRatioBench
 {
     const int Count = 10_000;
 
-    World world = null!;
+    readonly World world = Bench.World();
     double now;
 
     [Params(10, 100, 1000)]
@@ -18,7 +18,6 @@ public partial class DueRatioBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         for (var i = 0; i < Count; i++)
         {
             var entity = world.Create();

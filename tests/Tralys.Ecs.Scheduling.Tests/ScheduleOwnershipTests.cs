@@ -5,7 +5,7 @@ public sealed partial class ScheduleOwnershipTests
     [System, InSet<Late>]
     sealed partial class Bravo : SystemBase
     {
-        public List<string> Log = null!;
+        public required List<string> Log;
 
         protected override void OnRun(in RunContext context) => Log.Add(nameof(Bravo));
     }
@@ -13,7 +13,7 @@ public sealed partial class ScheduleOwnershipTests
     [System, InSet<Late>]
     sealed partial class Yankee : SystemBase
     {
-        public List<string> Log = null!;
+        public required List<string> Log;
 
         protected override void OnRun(in RunContext context) => Log.Add(nameof(Yankee));
     }

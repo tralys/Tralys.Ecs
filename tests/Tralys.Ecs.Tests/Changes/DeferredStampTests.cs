@@ -49,9 +49,12 @@ public sealed class DeferredStampTests
         world.Set(entity, new Footnote { Line = 1 });
         world.TallyRows(entity).Set(new Tally { Slot = 1, Count = 1 });
 
-        var archetype = world.allocator.Slots[entity.Index].Archetype!;
+        var archetype = await Assert
+            .That(world.allocator.Slots[entity.Index].Archetype)
+            .IsNotNull();
         var sparse = world.SparseFor(world.registry.IndexOf<Footnote>());
-        var rows = world.FindRows<int, Tally>()!.BlockOf(entity)!;
+        var store = await Assert.That(world.FindRows<int, Tally>()).IsNotNull();
+        var rows = await Assert.That(store.BlockOf(entity)).IsNotNull();
 
         await Assert.That(archetype.TrackedSlot(world.registry.IndexOf<Velocity>())).IsEqualTo(-1);
         await Assert.That(sparse.Changed.Length + sparse.Added.Length).IsEqualTo(0);

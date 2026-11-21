@@ -199,7 +199,8 @@ public readonly ref struct Rows<TKey, TRow>
         }
 
         /// <summary>The current row by <c>ref readonly</c>.</summary>
-        public readonly ref readonly TRow Current => ref block!.Rows[index];
+        public readonly ref readonly TRow Current =>
+            ref block is null ? ref Unsafe.NullRef<TRow>() : ref block.Rows[index];
 
         /// <summary>Advances to the next row not removed; false when none is left.</summary>
         [Effect(Effects.None)]
@@ -222,10 +223,12 @@ public readonly ref struct Rows<TKey, TRow>
             [CallerLineNumber] int line = 0
         )
         {
-            world!.At(file, line);
+            if (world is null || store is null || block is null)
+                return;
+            world.At(file, line);
             world.CheckWritable();
-            if (!block!.Dead[index])
-                store!.Remove(block, index, default);
+            if (!block.Dead[index])
+                store.Remove(block, index, default);
         }
 
         /// <summary>Ends the iteration; rows removed during it are compacted once no other iteration or edit is open.</summary>
@@ -233,7 +236,7 @@ public readonly ref struct Rows<TKey, TRow>
         public void Dispose()
         {
             if (block is not null)
-                store!.EndIteration(block);
+                store?.EndIteration(block);
         }
     }
 }

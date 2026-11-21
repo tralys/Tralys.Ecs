@@ -70,17 +70,34 @@ internal sealed class MultiStore<TKey> : IndexStore
             ? new EntityList(lists, held.Live, includeDetached ? held.Detached : -1)
             : default;
 
-    public override void Refresh(Entity entity) =>
-        Refresh(entity, reader.TryRead(world, entity, out var key), key);
+    public override void Refresh(Entity entity)
+    {
+        if (reader.TryRead(world, entity, out var key))
+            Refresh(entity, key);
+        else
+            Unkey(entity);
+    }
 
-    public override void Refresh(Entity entity, ref byte value) =>
-        Refresh(entity, reader.TryReadFrom(world, entity, ref value, out var key), key);
+    public override void Refresh(Entity entity, ref byte value)
+    {
+        if (reader.TryReadFrom(world, entity, ref value, out var key))
+            Refresh(entity, key);
+        else
+            Unkey(entity);
+    }
 
-    void Refresh(Entity entity, bool keyed, TKey key)
+    void Unkey(Entity entity)
+    {
+        var id = Own(entity);
+        if (id >= 0)
+            Drop(id);
+    }
+
+    void Refresh(Entity entity, TKey key)
     {
         var id = Own(entity);
         var lane = world.IndexLane(entity);
-        if (lane < 0 || !keyed)
+        if (lane < 0)
         {
             if (id >= 0)
                 Drop(id);

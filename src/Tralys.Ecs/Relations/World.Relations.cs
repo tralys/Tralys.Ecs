@@ -191,14 +191,15 @@ public sealed partial class World
             NoteRecordedEdge(source, newTarget, type);
             return;
         }
-        var store = FindRelations<R>();
-        var at = store?.IndexOf(source, oldTarget) ?? -1;
-        if (at < 0)
+        if (
+            FindRelations<R>() is not { } store
+            || store.IndexOf(source, oldTarget) is not (var at and >= 0)
+        )
             throw new InvalidOperationException(
                 $"{source} has no {typeof(R).Name} edge to {oldTarget}."
             );
         RelatableStore<R>(source, newTarget);
-        var payload = store!.EdgesOf(source)[at].Payload;
+        var payload = store.EdgesOf(source)[at].Payload;
         store.Retarget(this, source, oldTarget, newTarget, payload);
     }
 

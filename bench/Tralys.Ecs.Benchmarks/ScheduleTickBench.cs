@@ -66,18 +66,15 @@ public partial class ScheduleTickBench
         protected override void OnRun(in RunContext context) => RunSum(context.World, this);
     }
 
-    World world = null!;
-    SystemBase[] systems = [];
-    Schedule<Tick> schedule = null!;
+    readonly World world = Bench.World();
+    readonly SystemBase[] systems = [new R1(), new R2(), new R3(), new R4()];
+    readonly Schedule<Tick> schedule;
     double seconds;
 
-    [GlobalSetup]
-    public void Setup()
+    public ScheduleTickBench()
     {
-        world = Bench.World();
         for (var i = 0; i < 64; i++)
             world.Create(new PlayerBundle());
-        systems = [new R1(), new R2(), new R3(), new R4()];
         world.Faults = new Sink();
         var builder = new ScheduleBuilder<Tick>(
             new ScheduleDeclaration("Bench", [typeof(Readers)], [])

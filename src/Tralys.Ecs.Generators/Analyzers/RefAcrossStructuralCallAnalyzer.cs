@@ -89,7 +89,8 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
         {
             var index = work.Dequeue();
             queued[index] = false;
-            var start = entries[index]!;
+            if (entries[index] is not { } start)
+                continue;
             var state = new Dictionary<ILocalSymbol, Borrow>(start, SymbolEqualityComparer.Default);
             Transfer(blocks[index], state, null);
             foreach (var (next, handler) in Successors(blocks[index]))

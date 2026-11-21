@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
@@ -43,7 +44,7 @@ internal sealed class CommandBuffer
 {
     internal readonly World world;
     internal readonly bool parallel;
-    readonly bool attributing;
+    readonly AttributedLog? log;
     internal int id;
     internal CommandRecord[] records = new CommandRecord[16];
     internal int count;
@@ -53,7 +54,7 @@ internal sealed class CommandBuffer
     internal int placeholders;
     internal uint rental;
     readonly PayloadStore?[] payloads;
-    readonly List<int> usedPayloads = [];
+    readonly List<PayloadStore> usedPayloads = [];
     internal IndexEdit[] indexEdits = [];
     internal int indexEditCount;
     internal WriteTag[] tags = [];
@@ -65,7 +66,7 @@ internal sealed class CommandBuffer
     {
         this.world = world;
         this.parallel = parallel;
-        attributing = world.attributed is not null;
+        log = world.attributed;
         payloads = new PayloadStore?[world.registry.IndexBound];
     }
 
@@ -104,8 +105,8 @@ internal sealed class CommandBuffer
     {
         if (count == records.Length)
             Array.Resize(ref records, count * 2);
-        if (attributing)
-            Tag();
+        if (log is not null)
+            Tag(log);
         records[count++] = new CommandRecord
         {
             Kind = kind,
@@ -123,7 +124,7 @@ internal sealed class CommandBuffer
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    void Tag()
+    void Tag(AttributedLog log)
     {
         if (tags.Length < records.Length)
             Array.Resize(ref tags, records.Length);
@@ -134,13 +135,13 @@ internal sealed class CommandBuffer
                 Site = site,
                 Present = true,
             }
-            : world.CurrentTag();
+            : log.Current(world.currentSystem);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void At(string file, int line)
     {
-        if (attributing)
+        if (log is not null)
             site = new CallSite(file, line);
     }
 
@@ -152,11 +153,18 @@ internal sealed class CommandBuffer
             return Unsafe.As<PayloadStore<T>>(existing);
         var created = new PayloadStore<T>();
         payloads[type] = created;
-        usedPayloads.Add(type);
+        usedPayloads.Add(created);
         return created;
     }
 
-    internal PayloadStore Payload(int type) => payloads[type]!;
+    internal PayloadStore Payload(int type) => payloads[type] ?? ThrowNoPayloads(type);
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    PayloadStore ThrowNoPayloads(int type) =>
+        throw new InvalidOperationException(
+            $"{world.registry[type].Name} has no payload store, yet a record holds a payload of it."
+        );
 
     internal Entity NewPlaceholder()
     {
@@ -210,7 +218,7 @@ internal sealed class CommandBuffer
                 records[kept] = records[i];
                 // A record's Sequence is also its slot in tags.
                 records[kept].Sequence = kept;
-                if (attributing)
+                if (log is not null)
                     tags[kept] = tags[i];
             }
             kept++;
@@ -219,8 +227,8 @@ internal sealed class CommandBuffer
         // Payloads are named only by records, and a playback with nothing to apply never clears them.
         if (count == 0)
         {
-            foreach (var type in usedPayloads)
-                payloads[type]!.Reset();
+            foreach (var store in usedPayloads)
+                store.Reset();
         }
     }
 
@@ -231,8 +239,8 @@ internal sealed class CommandBuffer
         sequence = 0;
         placeholders = 0;
         retargets.Clear();
-        foreach (var type in usedPayloads)
-            payloads[type]!.Reset();
+        foreach (var store in usedPayloads)
+            store.Reset();
     }
 
     internal bool IsEmpty => count == 0;

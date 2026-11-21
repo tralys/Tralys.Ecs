@@ -40,14 +40,16 @@ public ref struct BundleWriter
                 buffer.world.StageBundled(entity, value);
             return;
         }
+        if (world is null || archetype is null)
+            return;
         var type = ComponentType<T>.Index;
-        var column = archetype!.ColumnSlot(type);
+        var column = archetype.ColumnSlot(type);
         if (column >= 0)
         {
             archetype.Values<T>(column)[row] = value;
             return;
         }
-        if (world!.layout.Class[type] == StorageClass.Sparse)
+        if (world.layout.Class[type] == StorageClass.Sparse)
             world.AddSparse(archetype.Entities[row], type, value);
     }
 }

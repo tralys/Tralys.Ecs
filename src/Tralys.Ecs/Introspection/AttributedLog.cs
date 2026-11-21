@@ -161,6 +161,4 @@ public sealed partial class World
         if (attributed is { } log)
             log.site = new CallSite(file, line);
     }
-
-    internal WriteTag CurrentTag() => attributed!.Current(currentSystem);
 }

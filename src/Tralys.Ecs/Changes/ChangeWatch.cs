@@ -39,8 +39,9 @@ public sealed class ChangeWatch<TBits> : IDisposable
         var kinds = new LogKinds[byType.Length];
         foreach (var type in types)
         {
-            byType[type] = [.. inputs.Where(input => input.Type == type)];
-            foreach (var input in byType[type]!)
+            WatchInput[] ofType = [.. inputs.Where(input => input.Type == type)];
+            byType[type] = ofType;
+            foreach (var input in ofType)
                 kinds[type] |= input.Entries;
         }
         cursor = world.Changes.Register(name);

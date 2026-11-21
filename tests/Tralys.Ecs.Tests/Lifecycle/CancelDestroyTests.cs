@@ -12,7 +12,7 @@ public sealed class CancelDestroyTests
         world.Destroy(entity);
         world.CancelDestroy(entity);
         var slot = world.allocator.Slots[entity.Index];
-        var archetype = slot.Archetype!;
+        var archetype = await Assert.That(slot.Archetype).IsNotNull();
         world.Playback();
 
         await Assert.That(archetype.IsPendingDestroy(slot.Row)).IsFalse();

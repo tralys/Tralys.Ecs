@@ -5,7 +5,7 @@ namespace Tralys.Ecs.Benchmarks;
 [MemoryDiagnoser]
 public partial class ManySystemsFewEntitiesBench
 {
-    World world = null!;
+    readonly World world = Bench.World();
     Entity[] entities = [];
     SystemId[] ids = [];
 
@@ -15,7 +15,6 @@ public partial class ManySystemsFewEntitiesBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         entities = new Entity[64];
         for (var i = 0; i < entities.Length; i++)
             entities[i] = world.Create(new PlayerBundle());

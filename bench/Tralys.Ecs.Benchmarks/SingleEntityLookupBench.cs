@@ -4,7 +4,7 @@ namespace Tralys.Ecs.Benchmarks;
 
 public class SingleEntityLookupBench
 {
-    World world = null!;
+    readonly World world = Bench.World();
     readonly SparseSetProto<BHealth> baseline = new();
     Entity[] sequential = [];
     Entity[] shuffled = [];
@@ -12,7 +12,6 @@ public class SingleEntityLookupBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         sequential = new Entity[10_000];
         for (var i = 0; i < sequential.Length; i++)
         {

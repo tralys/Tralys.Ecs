@@ -47,7 +47,7 @@ public sealed partial class World
         foreach (var child in left)
             Reparent(child, default, -1, reason, guardTargets: false);
         IndexConflictException? conflict;
-        var tag = attributed is null ? default : CurrentTag();
+        var tag = attributed is { } log ? log.Current(currentSystem) : default;
         BeginIndexBatch();
         extracting = true;
         try
@@ -180,7 +180,7 @@ internal sealed class Capturer(World world, in CaptureOptions options)
         if (fields)
         {
             ref var slot = ref world.allocator.Slots[entity.Index];
-            var archetype = slot.Archetype!;
+            var archetype = slot.Placed;
             for (var i = 0; i < archetype.Types.Length; i++)
             {
                 var column = archetype.SlotAt(i).Column;
@@ -310,7 +310,7 @@ internal sealed class Capturer(World world, in CaptureOptions options)
         var seen = new List<Archetype>();
         for (var local = 0; local < sources.Length; local++)
         {
-            var archetype = world.allocator.Slots[sources[local].Index].Archetype!;
+            var archetype = world.allocator.Slots[sources[local].Index].Placed;
             if (!groups.TryGetValue(archetype, out var members))
             {
                 groups.Add(archetype, members = []);

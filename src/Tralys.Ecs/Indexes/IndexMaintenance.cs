@@ -297,11 +297,11 @@ public sealed partial class World
     internal IndexConflictException? EndIndexBatch() =>
         --indexBatch > 0 || contested.Count == 0 ? null : TakeConflicts();
 
-    internal IndexConflictException? ApplyIndexEdits(CommandBuffer?[] buffers)
+    internal IndexConflictException? ApplyIndexEdits(ReadOnlySpan<CommandBuffer> buffers)
     {
         var total = 0;
         foreach (var buffer in buffers)
-            total += buffer?.indexEditCount ?? 0;
+            total += buffer.indexEditCount;
         if (total == 0)
             return null;
         if (indexEdits.Length < total)
@@ -309,7 +309,7 @@ public sealed partial class World
         var at = 0;
         foreach (var buffer in buffers)
         {
-            if (buffer is null || buffer.indexEditCount == 0)
+            if (buffer.indexEditCount == 0)
                 continue;
             Array.Copy(buffer.indexEdits, 0, indexEdits, at, buffer.indexEditCount);
             at += buffer.indexEditCount;

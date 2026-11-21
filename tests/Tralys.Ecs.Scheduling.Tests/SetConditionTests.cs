@@ -110,6 +110,7 @@ public sealed partial class SetConditionTests
         SetConfig? kept = null;
         builder.ConfigureSet<Early>(s => kept = s);
         builder.Build(world);
+        var config = await Assert.That(kept).IsNotNull();
 
         await Assert
             .That(() =>
@@ -117,7 +118,7 @@ public sealed partial class SetConditionTests
             )
             .Throws<InvalidOperationException>();
         await Assert
-            .That(() => kept!.RunIf(static (in RunContext _) => false))
+            .That(() => config.RunIf(static (in RunContext _) => false))
             .Throws<InvalidOperationException>();
     }
 

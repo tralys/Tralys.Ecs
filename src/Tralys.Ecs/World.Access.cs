@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
@@ -425,7 +426,7 @@ public sealed partial class World
                 AddSparseTag(entity, ref slot, type);
                 return;
         }
-        var target = WithType(slot.Archetype!, type);
+        var target = WithType(slot.Placed, type);
         MoveTo(entity, ref slot, target);
         ref readonly var typeSlot = ref target.SlotAt(target.IndexOf(type));
         ref var stored = ref Unsafe.As<T, byte>(ref TagValue<T>.Value);
@@ -578,7 +579,7 @@ public sealed partial class World
         {
             case StorageClass.Sparse:
             {
-                var storage = sparse[layout.SparseSlot[type]]!;
+                var storage = StoredSparse(type);
                 ref var value = ref storage.RowRef(storage.SlotOf(entity.Index));
                 Vacating(entity, type, ref value);
                 Report(
@@ -605,12 +606,12 @@ public sealed partial class World
                     ref Unsafe.NullRef<byte>(),
                     ref Unsafe.NullRef<byte>()
                 );
-                if (sparseTags[layout.SparseTagSlot[type]]!.Set(entity.Index, false))
+                if (sparseTags[layout.SparseTagSlot[type]]?.Set(entity.Index, false) == true)
                     slot.SparseCount--;
                 ReleaseSingleton(entity, type);
                 return;
         }
-        var source = slot.Archetype!;
+        var source = slot.Placed;
         var column = source.ColumnSlot(type);
         ref var departing = ref column >= 0
             ? ref source.RowRef(column, slot.Row)
@@ -847,15 +848,16 @@ public sealed partial class World
             }
             case StorageClass.Sparse:
             {
-                var storage = sparse[layout.SparseSlot[type]];
-                var at = storage?.SlotOf(entity.Index) ?? -1;
-                if (at < 0)
+                if (
+                    sparse[layout.SparseSlot[type]] is not { } storage
+                    || storage.SlotOf(entity.Index) is not (var at and >= 0)
+                )
                     return ref Unsafe.NullRef<T>();
                 location.Kind = LocationKind.Sparse;
                 location.Sparse = storage;
                 location.Row = at;
                 location.Tracked = registry[type].IsStamped ? 0 : -1;
-                return ref Unsafe.As<SparseStorage<T>>(storage!).Values[at];
+                return ref Unsafe.As<SparseStorage<T>>(storage).Values[at];
             }
             case StorageClass.SparseTag:
                 if (sparseTags[layout.SparseTagSlot[type]]?.Contains(entity.Index) != true)
@@ -870,10 +872,10 @@ public sealed partial class World
     {
         if (!Tracking || !location.IsTracked)
             return;
-        if (location.Kind == LocationKind.Column)
-            location.Archetype!.Stamp(location.Tracked, location.Row, version);
-        else
-            location.Sparse!.Stamp(location.Row, version);
+        if (location is { Kind: LocationKind.Column, Archetype: { } archetype })
+            archetype.Stamp(location.Tracked, location.Row, version);
+        else if (location is { Kind: LocationKind.Sparse, Sparse: { } storage })
+            storage.Stamp(location.Row, version);
     }
 
     internal ulong StampOf<T>(Entity entity, bool added)
@@ -890,9 +892,8 @@ public sealed partial class World
                 added
                     ? location.Archetype.AddedAt(location.Tracked, location.Row)
                     : location.Archetype.ChangedAt(location.Tracked, location.Row),
-            LocationKind.Sparse when location.Tracked >= 0 => added
-                ? location.Sparse!.Added[location.Row]
-                : location.Sparse!.Changed[location.Row],
+            LocationKind.Sparse when location.Sparse is { } storage && location.Tracked >= 0 =>
+                added ? storage.Added[location.Row] : storage.Changed[location.Row],
             _ => 0,
         };
     }
@@ -910,6 +911,15 @@ public sealed partial class World
 
     string MissingRequirement(ComponentDescriptor descriptor, int required, Entity entity) =>
         $"{descriptor.Name} requires {registry[required].Name}, which {entity} lacks.";
+
+    SparseStorage StoredSparse(int type) => sparse[layout.SparseSlot[type]] ?? ThrowNoSparse(type);
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    SparseStorage ThrowNoSparse(int type) =>
+        throw new InvalidOperationException(
+            $"{registry[type].Name} has no sparse storage, yet an entity stores it."
+        );
 
     internal unsafe SparseStorage SparseFor(int type)
     {

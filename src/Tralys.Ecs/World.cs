@@ -256,7 +256,7 @@ public sealed partial class World : IDisposable
 
     internal void MoveTo(Entity entity, ref EntitySlot slot, Archetype target)
     {
-        var source = slot.Archetype!;
+        var source = slot.Placed;
         if (source == target)
             return;
         var map = source.MapTo(target);

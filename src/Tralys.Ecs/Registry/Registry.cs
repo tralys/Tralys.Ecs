@@ -106,17 +106,18 @@ public sealed class Registry
     public ReadOnlySpan<ComponentDescriptor> Descriptors => sorted;
 
     /// <summary>Whether dense index <paramref name="index"/> names a type in this registry.</summary>
-    public bool Contains(int index) =>
-        (uint)index < (uint)byIndex.Length && byIndex[index] is not null;
+    public bool Contains(int index) => At(index) is not null;
 
     /// <summary>The descriptor at dense index <paramref name="index"/>; throws <see cref="ArgumentOutOfRangeException"/> when it is not in this registry.</summary>
     public ComponentDescriptor this[int index] =>
-        Contains(index)
-            ? byIndex[index]!
-            : throw new ArgumentOutOfRangeException(
-                nameof(index),
-                $"Dense index {index} is not in this registry."
-            );
+        At(index)
+        ?? throw new ArgumentOutOfRangeException(
+            nameof(index),
+            $"Dense index {index} is not in this registry."
+        );
+
+    ComponentDescriptor? At(int index) =>
+        (uint)index < (uint)byIndex.Length ? byIndex[index] : null;
 
     /// <summary>The descriptor named <paramref name="name"/>, or null.</summary>
     public ComponentDescriptor? FindByName(string name) => byName.GetValueOrDefault(name);

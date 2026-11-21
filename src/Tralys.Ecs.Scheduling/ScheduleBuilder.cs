@@ -141,7 +141,7 @@ public sealed class SystemConfig
         where TSet : class
     {
         if (slot.Descriptor.Order.Set is { } declared && declared != typeof(TSet))
-            slot.ConfigSetConflict = true;
+            slot.ConflictingDeclaredSet = declared;
         slot.Set = typeof(TSet);
         return this;
     }

@@ -7,8 +7,8 @@ namespace Tralys.Ecs.Benchmarks;
 [MemoryDiagnoser]
 public class ResetBench
 {
-    World world = null!;
-    WorldSnapshot baseline = null!;
+    readonly World world = Bench.World();
+    WorldSnapshot? baseline;
 
     [Params(1_000, 10_000)]
     public int Entities;
@@ -16,7 +16,6 @@ public class ResetBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         Build(world, Entities);
         baseline = world.Snapshot();
     }
@@ -56,5 +55,11 @@ public class ResetBench
     }
 
     [Benchmark]
-    public void Reset() => world.Reset(baseline);
+    public void Reset() =>
+        world.Reset(
+            baseline
+                ?? throw new InvalidOperationException(
+                    "Setup takes the baseline at the Entities under test."
+                )
+        );
 }

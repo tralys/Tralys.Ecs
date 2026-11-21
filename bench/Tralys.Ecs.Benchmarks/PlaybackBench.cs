@@ -5,7 +5,7 @@ namespace Tralys.Ecs.Benchmarks;
 [MemoryDiagnoser]
 public class PlaybackBench
 {
-    World world = null!;
+    readonly World world = Bench.World();
     Entity[] entities = [];
 
     [Params(4, 32)]
@@ -14,7 +14,6 @@ public class PlaybackBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         entities = new Entity[1024];
         for (var i = 0; i < entities.Length; i++)
             entities[i] = world.Create(new NarrowBundle());

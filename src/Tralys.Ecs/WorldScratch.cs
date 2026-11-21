@@ -29,10 +29,9 @@ public sealed class WorldScratch
                 "World scratch belongs to the owner thread, so a partitioned query body cannot take a snapshot; take it before or after the run."
             );
         var pool = Pool<T>();
-        var fits = pool.TryPop(out var array) && array.Length >= minimumLength;
-        if (!fits)
+        if (!pool.TryPop(out var array) || array.Length < minimumLength)
             array = new T[Math.Max(16, (int)BitOperationsCeil((uint)minimumLength))];
-        return new ScratchBuffer<T>(pool, array!, minimumLength);
+        return new ScratchBuffer<T>(pool, array, minimumLength);
     }
 
     Stack<T[]> Pool<T>()

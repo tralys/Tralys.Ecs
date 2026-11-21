@@ -13,7 +13,10 @@ public sealed class TypeHeadroomTests
 
         var entity = world.Create();
         world.Set(entity, new C1099 { Value = 1 });
-        var signature = world.allocator.Slots[entity.Index].Archetype!.Signature;
+        var archetype = await Assert
+            .That(world.allocator.Slots[entity.Index].Archetype)
+            .IsNotNull();
+        var signature = archetype.Signature;
 
         await Assert.That(high).IsGreaterThanOrEqualTo(1024);
         await Assert.That(signature.Has(high)).IsTrue();

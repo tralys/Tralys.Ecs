@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
@@ -87,7 +88,7 @@ internal abstract class IndexStore
 internal abstract class KeyReader<TKey>
     where TKey : notnull
 {
-    public abstract bool TryRead(World world, Entity entity, out TKey key);
+    public abstract bool TryRead(World world, Entity entity, [MaybeNullWhen(false)] out TKey key);
 
     public abstract bool TryReadFrom(World world, Entity entity, ref byte value, out TKey key);
 
@@ -99,7 +100,7 @@ internal sealed class KeyReader<TComponent, TKey, TKeyer>(bool perParent) : KeyR
     where TKey : notnull
     where TKeyer : IIndexKey<TComponent, TKey>
 {
-    public override bool TryRead(World world, Entity entity, out TKey key)
+    public override bool TryRead(World world, Entity entity, [MaybeNullWhen(false)] out TKey key)
     {
         ref var value = ref world.Locate<TComponent>(
             entity,
@@ -108,7 +109,7 @@ internal sealed class KeyReader<TComponent, TKey, TKeyer>(bool perParent) : KeyR
         );
         if (Unsafe.IsNullRef(ref value))
         {
-            key = default!;
+            key = default;
             return false;
         }
         return TryReadFrom(world, entity, ref Unsafe.As<TComponent, byte>(ref value), out key);

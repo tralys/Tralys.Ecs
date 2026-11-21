@@ -139,17 +139,17 @@ public sealed class BufferArena<T> : IBufferArena
         world.CheckWritable();
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         ref var entry = ref Live(handle);
-        if (Unsafe.IsNullRef(ref entry))
+        if (Unsafe.IsNullRef(ref entry) || entry.Array is not { } array)
             throw new InvalidOperationException("The buffer handle is null or freed.");
-        if (length > entry.Array!.Length)
+        if (length > array.Length)
         {
             var grown = Rent(length);
-            entry.Array.AsSpan(0, entry.Length).CopyTo(grown);
-            Return(entry.Array);
+            array.AsSpan(0, entry.Length).CopyTo(grown);
+            Return(array);
             entry.Array = grown;
         }
         else if (length > entry.Length)
-            entry.Array.AsSpan(entry.Length, length - entry.Length).Clear();
+            array.AsSpan(entry.Length, length - entry.Length).Clear();
         entry.Length = length;
     }
 
@@ -159,9 +159,9 @@ public sealed class BufferArena<T> : IBufferArena
     {
         world.CheckWritable();
         ref var entry = ref Live(handle);
-        if (Unsafe.IsNullRef(ref entry))
+        if (Unsafe.IsNullRef(ref entry) || entry.Array is not { } array)
             return false;
-        Return(entry.Array!);
+        Return(array);
         entry.Array = null;
         entry.Length = 0;
         entry.Generation = entry.Generation == uint.MaxValue ? 1 : entry.Generation + 1;

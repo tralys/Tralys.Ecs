@@ -5,7 +5,7 @@ public sealed partial class ReplanTests
     [System, InSet<Early>]
     sealed partial class Alpha : SystemBase
     {
-        public List<string> Log = null!;
+        public required List<string> Log;
 
         protected override void OnRun(in RunContext context) => Log.Add(nameof(Alpha));
     }
@@ -13,7 +13,7 @@ public sealed partial class ReplanTests
     [System, InSet<Early>]
     sealed partial class Bravo : SystemBase
     {
-        public List<string> Log = null!;
+        public required List<string> Log;
 
         protected override void OnRun(in RunContext context) => Log.Add(nameof(Bravo));
     }
@@ -21,7 +21,7 @@ public sealed partial class ReplanTests
     [System, InSet<Early>]
     sealed partial class Charlie : SystemBase
     {
-        public List<string> Log = null!;
+        public required List<string> Log;
 
         protected override void OnRun(in RunContext context) => Log.Add(nameof(Charlie));
     }

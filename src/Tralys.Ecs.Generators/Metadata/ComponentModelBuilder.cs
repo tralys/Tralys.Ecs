@@ -106,8 +106,8 @@ static class ComponentModelBuilder
             }
             else if (Symbols.IsAttribute(attribute, Symbols.Requires))
             {
-                var required = attribute.AttributeClass!.TypeArguments[0];
-                requires.Add(Symbols.Name(required));
+                if (attribute.AttributeClass is { TypeArguments.Length: 1 } requirement)
+                    requires.Add(Symbols.Name(requirement.TypeArguments[0]));
             }
             else if (Symbols.IndexKindOf(attribute) is not null)
                 indexAttributes.Add(attribute);
@@ -300,13 +300,14 @@ static class ComponentModelBuilder
         );
         var open = closed.OriginalDefinition;
         var declaring = open.GetAttributes().FirstOrDefault(a => KindOf(a) is not null);
-        var definition = declaring is null
-            ? null
-            : Build(compilation, open, "struct", declaring, KindOf(declaring)!.Value) with
-            {
-                KeyType = ClosedKeyType(closed),
-                Problems = default,
-            };
+        var definition =
+            declaring is not null && KindOf(declaring) is { } kind
+                ? Build(compilation, open, "struct", declaring, kind) with
+                {
+                    KeyType = ClosedKeyType(closed),
+                    Problems = default,
+                }
+                : null;
 
         var walker = new LayoutWalker(compilation, closed, compilation.Assembly);
         if (definition is { Kind: not DeclKind.Tag })

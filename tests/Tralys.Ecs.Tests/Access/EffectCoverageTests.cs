@@ -28,18 +28,18 @@ public sealed class EffectCoverageTests
         var missing = types
             .SelectMany(type =>
                 type.GetMethods(
-                    BindingFlags.Public
-                        | BindingFlags.Instance
-                        | BindingFlags.Static
-                        | BindingFlags.DeclaredOnly
-                )
+                        BindingFlags.Public
+                            | BindingFlags.Instance
+                            | BindingFlags.Static
+                            | BindingFlags.DeclaredOnly
+                    )
+                    .Where(method =>
+                        !method.IsSpecialName
+                        && method.Name is not ("Equals" or "GetHashCode" or "ToString")
+                        && method.GetCustomAttribute<EffectAttribute>() is null
+                    )
+                    .Select(method => $"{type.Name}.{method.Name}")
             )
-            .Where(method =>
-                !method.IsSpecialName
-                && method.Name is not ("Equals" or "GetHashCode" or "ToString")
-                && method.GetCustomAttribute<EffectAttribute>() is null
-            )
-            .Select(method => $"{method.DeclaringType!.Name}.{method.Name}")
             .ToList();
 
         await Assert.That(missing).IsEmpty();

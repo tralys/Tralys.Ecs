@@ -5,26 +5,67 @@ namespace Tralys.Ecs;
 /// as often as needed.</summary>
 public sealed class WorldSnapshot
 {
-    internal World Owner { get; init; } = null!;
-    internal AllocatorState Allocator { get; init; } = null!;
-    internal ulong Version { get; init; }
-    internal int RunSequence { get; init; }
-    internal ArchetypeState[] Archetypes { get; init; } = null!;
-    internal SparseStorage?[] Sparse { get; init; } = null!;
-    internal SparseTagStorage?[] SparseTags { get; init; } = null!;
-    internal RelationStore?[] Relations { get; init; } = null!;
-    internal RowStore?[] Rows { get; init; } = null!;
-    internal IndexStore?[] Indexes { get; init; } = null!;
-    internal HierarchyStore Hierarchy { get; init; } = null!;
-    internal object?[] Arenas { get; init; } = null!;
-    internal Entity[] SingletonHolders { get; init; } = null!;
-    internal Entity SingletonOwner { get; init; }
-    internal Entity[] PendingDestroys { get; init; } = null!;
-    internal WriteTag[]? DestroyTags { get; init; }
-    internal Dictionary<SystemId, ulong>?[] QueryRuns { get; init; } = null!;
+    internal WorldSnapshot(
+        World owner,
+        AllocatorState allocator,
+        ulong version,
+        int runSequence,
+        ArchetypeState[] archetypes,
+        SparseStorage?[] sparse,
+        SparseTagStorage?[] sparseTags,
+        RelationStore?[] relations,
+        RowStore?[] rows,
+        IndexStore?[] indexes,
+        HierarchyStore hierarchy,
+        object?[] arenas,
+        Entity[] singletonHolders,
+        Entity singletonOwner,
+        Entity[] pendingDestroys,
+        WriteTag[]? destroyTags,
+        Dictionary<SystemId, ulong>?[] queryRuns,
+        int entityCount
+    )
+    {
+        Owner = owner;
+        Allocator = allocator;
+        Version = version;
+        RunSequence = runSequence;
+        Archetypes = archetypes;
+        Sparse = sparse;
+        SparseTags = sparseTags;
+        Relations = relations;
+        Rows = rows;
+        Indexes = indexes;
+        Hierarchy = hierarchy;
+        Arenas = arenas;
+        SingletonHolders = singletonHolders;
+        SingletonOwner = singletonOwner;
+        PendingDestroys = pendingDestroys;
+        DestroyTags = destroyTags;
+        QueryRuns = queryRuns;
+        EntityCount = entityCount;
+    }
+
+    internal World Owner { get; }
+    internal AllocatorState Allocator { get; }
+    internal ulong Version { get; }
+    internal int RunSequence { get; }
+    internal ArchetypeState[] Archetypes { get; }
+    internal SparseStorage?[] Sparse { get; }
+    internal SparseTagStorage?[] SparseTags { get; }
+    internal RelationStore?[] Relations { get; }
+    internal RowStore?[] Rows { get; }
+    internal IndexStore?[] Indexes { get; }
+    internal HierarchyStore Hierarchy { get; }
+    internal object?[] Arenas { get; }
+    internal Entity[] SingletonHolders { get; }
+    internal Entity SingletonOwner { get; }
+    internal Entity[] PendingDestroys { get; }
+    internal WriteTag[]? DestroyTags { get; }
+    internal Dictionary<SystemId, ulong>?[] QueryRuns { get; }
 
     /// <summary>Entities alive when the snapshot was taken, pending destroys included.</summary>
-    public int EntityCount { get; internal init; }
+    public int EntityCount { get; }
 }
 
 /// <summary>Which operation a <see cref="RestoreInfo"/> reports.</summary>
@@ -78,27 +119,26 @@ public sealed partial class World
         var arenaStates = new object?[arenas.Length];
         for (var i = 0; i < arenaStates.Length; i++)
             arenaStates[i] = (arenas[i] as IBufferArena)?.Save();
-        return new WorldSnapshot
-        {
-            Owner = this,
-            Allocator = allocator.Export(),
-            Version = version,
-            RunSequence = runSequence,
-            Archetypes = states,
-            Sparse = [.. sparse.Select(s => s?.Clone())],
-            SparseTags = [.. sparseTags.Select(s => s?.Clone())],
-            Relations = [.. relations.Select(s => s?.Clone())],
-            Rows = [.. rowStores.Select(s => s?.Clone())],
-            Indexes = [.. indexStores.Select(s => s?.Clone())],
-            Hierarchy = hierarchy.Clone(),
-            Arenas = arenaStates,
-            SingletonHolders = [.. singletonHolders],
-            SingletonOwner = singletonOwner,
-            PendingDestroys = [.. pendingDestroys],
-            DestroyTags = attributed?.DestroyTags(pendingDestroys),
-            QueryRuns = runs,
-            EntityCount = allocator.InUse,
-        };
+        return new WorldSnapshot(
+            owner: this,
+            allocator: allocator.Export(),
+            version: version,
+            runSequence: runSequence,
+            archetypes: states,
+            sparse: [.. sparse.Select(s => s?.Clone())],
+            sparseTags: [.. sparseTags.Select(s => s?.Clone())],
+            relations: [.. relations.Select(s => s?.Clone())],
+            rows: [.. rowStores.Select(s => s?.Clone())],
+            indexes: [.. indexStores.Select(s => s?.Clone())],
+            hierarchy: hierarchy.Clone(),
+            arenas: arenaStates,
+            singletonHolders: [.. singletonHolders],
+            singletonOwner: singletonOwner,
+            pendingDestroys: [.. pendingDestroys],
+            destroyTags: attributed?.DestroyTags(pendingDestroys),
+            queryRuns: runs,
+            entityCount: allocator.InUse
+        );
     }
 
     /// <summary>Rewinds this world to <paramref name="baseline"/>: the same handles, values, stamps and change version, so the next tick
@@ -198,10 +238,10 @@ public sealed partial class World
         observers.Discard();
         changes.Expire();
         attributed?.Clear();
-        if (baseline.DestroyTags is { } tags)
+        if (baseline.DestroyTags is { } tags && attributed is { } log)
         {
             for (var i = 0; i < tags.Length; i++)
-                attributed!.TagDestroy(baseline.PendingDestroys[i].Index, tags[i]);
+                log.TagDestroy(baseline.PendingDestroys[i].Index, tags[i]);
         }
         foreach (var query in liveQueries)
         {

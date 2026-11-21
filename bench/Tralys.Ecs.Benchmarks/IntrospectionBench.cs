@@ -7,7 +7,7 @@ namespace Tralys.Ecs.Benchmarks;
 [MemoryDiagnoser]
 public partial class IntrospectionBench
 {
-    World world = null!;
+    readonly World world = Bench.World();
     Entity sample;
     int touched;
 
@@ -25,7 +25,6 @@ public partial class IntrospectionBench
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         world.Changes.Register("probe");
         for (var i = 0; i < 1_000; i++)
         {

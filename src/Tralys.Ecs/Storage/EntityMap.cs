@@ -208,7 +208,7 @@ internal sealed class ListArena<T> : ListStamps
         block.Count--;
         if (index < block.Count)
             Array.Copy(items, at + 1, items, at, block.Count - index);
-        items[block.Start + block.Count] = default!;
+        Array.Clear(items, block.Start + block.Count, 1);
         live--;
         Bump(list);
         CompactIfSparse();

@@ -13,5 +13,5 @@ internal sealed class SystemSlot(SystemBase system, Type type, SystemDescriptor 
     public QuarantineState Quarantine;
     public int Index;
     public int SetIndex;
-    public bool ConfigSetConflict;
+    public Type? ConflictingDeclaredSet;
 }

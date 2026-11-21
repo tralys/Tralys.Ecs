@@ -13,8 +13,12 @@ public sealed class DetachedPartitionTests
 
         world.Detach(offline);
 
-        var attachedArchetype = world.allocator.Slots[attached.Index].Archetype!;
-        var offlineArchetype = world.allocator.Slots[offline.Index].Archetype!;
+        var attachedArchetype = await Assert
+            .That(world.allocator.Slots[attached.Index].Archetype)
+            .IsNotNull();
+        var offlineArchetype = await Assert
+            .That(world.allocator.Slots[offline.Index].Archetype)
+            .IsNotNull();
         await Assert
             .That((world.StateOf(offline), world.IsDetached(offline)))
             .IsEqualTo((LifecycleState.Alive, true));

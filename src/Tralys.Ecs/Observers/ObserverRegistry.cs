@@ -370,17 +370,20 @@ public sealed class ObserverRegistry
             );
     }
 
-    internal void QueueReplay(Entity entity, int type, ref byte value, int recipient) =>
-        Enqueue(
-            new ObserverEvent
-            {
-                Kind = EventKind.Replay,
-                Entity = entity,
-                Type = type,
-                New = byType[type]!.Values.Capture(ref value),
-                Recipient = recipient,
-            }
-        );
+    internal void QueueReplay(Entity entity, int type, ref byte value, int recipient)
+    {
+        if (byType[type] is { } observers)
+            Enqueue(
+                new ObserverEvent
+                {
+                    Kind = EventKind.Replay,
+                    Entity = entity,
+                    Type = type,
+                    New = observers.Values.Capture(ref value),
+                    Recipient = recipient,
+                }
+            );
+    }
 
     // Copies the departing value now, before its slot is reused.
     internal void QueueRemove(Entity entity, int type, ref byte value, LifecycleReason reason)
@@ -556,7 +559,7 @@ public sealed class ObserverRegistry
         {
             ref readonly var e = ref delivering[i];
             if (e.Type >= 0)
-                byType[e.Type]!.Deliver(world, e, ref errors);
+                byType[e.Type]?.Deliver(world, e, ref errors);
             else if (e.Kind == EventKind.Hierarchy)
             {
                 var context = new ObserverContext(world, e.Reason);

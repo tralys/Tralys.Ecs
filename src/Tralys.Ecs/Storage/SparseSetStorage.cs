@@ -82,10 +82,6 @@ internal abstract class SparseStorage
 
     protected int Insert(Entity entity)
     {
-        var page = (int)(entity.Index >> PageBits);
-        if (page >= pages.Length)
-            Array.Resize(ref pages, Math.Max(page + 1, pages.Length * 2));
-        var slots = pages[page] ??= new int[PageSize];
         if (Count == Owners.Length)
         {
             Array.Resize(ref Owners, Count * 2);
@@ -99,8 +95,23 @@ internal abstract class SparseStorage
         var slot = Count++;
         Moves++;
         Owners[slot] = entity;
-        slots[entity.Index & (PageSize - 1)] = slot + 1;
+        Map(entity.Index, slot);
         return slot;
+    }
+
+    void Map(uint index, int slot)
+    {
+        var page = (int)(index >> PageBits);
+        if (page >= pages.Length)
+            Array.Resize(ref pages, Math.Max(page + 1, pages.Length * 2));
+        (pages[page] ??= new int[PageSize])[index & (PageSize - 1)] = slot + 1;
+    }
+
+    void Unmap(uint index)
+    {
+        var page = (int)(index >> PageBits);
+        if ((uint)page < (uint)pages.Length && pages[page] is { } slots)
+            slots[index & (PageSize - 1)] = 0;
     }
 
     public bool Remove(uint index)
@@ -118,7 +129,7 @@ internal abstract class SparseStorage
                 Changed[slot] = Changed[last];
                 Added[slot] = Added[last];
             }
-            pages[Owners[slot].Index >> PageBits]![Owners[slot].Index & (PageSize - 1)] = slot + 1;
+            Map(Owners[slot].Index, slot);
         }
         ClearValue(last);
         Owners[last] = default;
@@ -127,7 +138,7 @@ internal abstract class SparseStorage
             Changed[last] = 0;
             Added[last] = 0;
         }
-        pages[index >> PageBits]![index & (PageSize - 1)] = 0;
+        Unmap(index);
         Count--;
         Moves++;
         return true;
@@ -137,7 +148,7 @@ internal abstract class SparseStorage
     {
         for (var i = 0; i < Count; i++)
         {
-            pages[Owners[i].Index >> PageBits]![Owners[i].Index & (PageSize - 1)] = 0;
+            Unmap(Owners[i].Index);
             ClearValue(i);
             Owners[i] = default;
         }

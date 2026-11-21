@@ -16,7 +16,7 @@ public sealed class EnableMaskTailTests
         world.Remove<Burning>(entities[0]);
 
         var slot = world.allocator.Slots[entities[1].Index];
-        var archetype = slot.Archetype!;
+        var archetype = await Assert.That(slot.Archetype).IsNotNull();
 
         await Assert.That(archetype.Count).IsEqualTo(1);
         await Assert.That(archetype.EnableWords[0] >> archetype.Count).IsEqualTo(0UL);

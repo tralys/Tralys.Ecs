@@ -8,14 +8,10 @@ public class ExecutorWakeJoinBench
 {
     const int Partitions = 8;
     readonly long[] sums = new long[Partitions * 8];
-    WorkerPool pool = null!;
+    readonly WorkerPool pool = new(Math.Min(Environment.ProcessorCount, Partitions) - 1);
 
     [Params(32, 512)]
     public int RowsPerPartition;
-
-    [GlobalSetup]
-    public void Setup() =>
-        pool = new WorkerPool(Math.Min(Environment.ProcessorCount, Partitions) - 1);
 
     [GlobalCleanup]
     public void Cleanup() => pool.Dispose();

@@ -252,13 +252,15 @@ static class ModuleEmitter
     public static string Module(
         string assembly,
         IReadOnlyList<TypeModel> types,
-        IReadOnlyList<InstanceModel> instances,
+        IReadOnlyList<(InstanceModel Instance, TypeModel Definition)> instances,
         EquatableArray<string> referenced
     )
     {
         var writer = new CodeWriter();
         writer.Line(Header);
-        var names = types.Select(t => t.DisplayName).Concat(instances.Select(i => i.DisplayName));
+        var names = types
+            .Select(t => t.DisplayName)
+            .Concat(instances.Select(i => i.Instance.DisplayName));
         writer.Line(
             $"[assembly: global::Tralys.Ecs.Generated.ComponentModuleManifest(new string[] {{ {string.Join(", ", names.Select(n => "\"" + n + "\""))} }})]"
         );
@@ -302,7 +304,7 @@ static class ModuleEmitter
                     type.FullName
                 );
             }
-            foreach (var instance in instances)
+            foreach (var (instance, definition) in instances)
             {
                 writer.Line();
                 var at = n++;
@@ -312,7 +314,7 @@ static class ModuleEmitter
                     instance.FullName,
                     instance.DisplayName,
                     instance.Version,
-                    instance.Definition!,
+                    definition,
                     instance.Layout,
                     instance.FullName,
                     $"I{at}"

@@ -61,7 +61,8 @@ static class IndexModelBuilder
                 );
                 continue;
             }
-            indexes.Add(index!);
+            if (index is not null)
+                indexes.Add(index);
         }
         return access ?? "";
     }

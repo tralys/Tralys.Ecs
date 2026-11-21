@@ -1,9 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Tralys.Ecs;
 
 /// <summary>One step of a linearised schedule: a system, or a named playback point.</summary>
 internal readonly record struct ScheduleStep(int Slot, bool FinalizesDestroys, string? Name)
 {
-    public bool IsSystem => Slot >= 0;
+    [MemberNotNullWhen(false, nameof(Name))]
+    public bool IsSystem => Name is null;
 
     public static ScheduleStep System(int slot) => new(slot, false, null);
 }
@@ -37,9 +40,9 @@ internal sealed class SchedulePlan(ScheduleStep[] steps, (int Start, int End)[] 
         {
             var slot = slots[i];
             setOf[i] = sets;
-            if (slot.ConfigSetConflict)
+            if (slot.ConflictingDeclaredSet is { } declared)
                 problems.Add(
-                    $"{slot.Descriptor.Name} is declared in set {slot.Descriptor.Order.Set!.Name} and configured into another."
+                    $"{slot.Descriptor.Name} is declared in set {declared.Name} and configured into another."
                 );
             if (slot.Set is not { } set)
                 continue;

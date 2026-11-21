@@ -71,23 +71,24 @@ static class QueryModelBuilder
         foreach (var p in method.Parameters)
         {
             var model = Parameter(p, terms.Count, parallel, out var term, out var problem);
-            if (problem is not null)
+            if (model is null)
             {
-                problems.Add(
-                    new Problem(
-                        problem.Value.Descriptor,
-                        LocationInfo.From(p.Locations.FirstOrDefault()) ?? location,
-                        p.Name,
-                        name,
-                        problem.Value.Detail
-                    )
-                );
+                if (problem is { } invalid)
+                    problems.Add(
+                        new Problem(
+                            invalid.Descriptor,
+                            LocationInfo.From(p.Locations.FirstOrDefault()) ?? location,
+                            p.Name,
+                            name,
+                            invalid.Detail
+                        )
+                    );
                 continue;
             }
-            parameters.Add(model!);
+            parameters.Add(model);
             if (term is not null)
                 terms.Add(term);
-            if (model!.Kind != ParamKind.Accumulator)
+            if (model.Kind != ParamKind.Accumulator)
                 continue;
             if (accumulator is not null)
                 Fail("it takes more than one accumulator");
@@ -122,9 +123,12 @@ static class QueryModelBuilder
                 includePending = true;
             else if (Symbols.IsAttribute(use, Symbols.IncludeDetached))
                 includeDetached = true;
-            else if (Filter(use) is { } kind)
+            else if (
+                Filter(use) is { } kind
+                && use.AttributeClass is { TypeArguments.Length: 1 } filter
+            )
             {
-                var type = use.AttributeClass!.TypeArguments[0];
+                var type = filter.TypeArguments[0];
                 var facts = Symbols.Facts(type);
                 if (facts is null)
                 {
@@ -396,12 +400,12 @@ static class QueryModelBuilder
     )
     {
         isStatic = false;
-        if (string.IsNullOrEmpty(actName))
+        if (actName is null or "")
         {
             fail("[Collect] needs Act, the method run per collected entity");
             return;
         }
-        var candidates = host.GetMembers(actName!).OfType<IMethodSymbol>().ToList();
+        var candidates = host.GetMembers(actName).OfType<IMethodSymbol>().ToList();
         if (candidates.Count != 1)
         {
             fail($"Act names '{actName}', which must be exactly one method of the type");

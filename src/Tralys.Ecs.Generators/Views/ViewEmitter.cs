@@ -46,9 +46,12 @@ static class ViewEmitter
         var parts = new List<ViewPart>();
         foreach (var attribute in type.GetAttributes())
         {
-            if (!Symbols.IsAttribute(attribute, Symbols.Part))
+            if (
+                !Symbols.IsAttribute(attribute, Symbols.Part)
+                || attribute.AttributeClass is not { TypeArguments.Length: 1 } partAttribute
+            )
                 continue;
-            var part = attribute.AttributeClass!.TypeArguments[0];
+            var part = partAttribute.TypeArguments[0];
             if (Symbols.Facts(part) is not { } facts)
                 continue;
             if (parts.Any(p => p.Name == part.Name))

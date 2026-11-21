@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Tralys.Ecs;
 
 /// <summary>Entities ordered by key, such as deadlines. Pending-destroy entities are never listed; detached ones only through
@@ -21,11 +23,11 @@ public readonly ref struct OrderedIndex<TKey>
         new(store, upToInclusive, includeDetached);
 
     /// <summary>The entry with the smallest key.</summary>
-    public bool TryPeek(out TKey key, out Entity entity)
+    public bool TryPeek([MaybeNullWhen(false)] out TKey key, out Entity entity)
     {
         if (store is not null)
             return store.TryPeek(includeDetached, out key, out entity);
-        key = default!;
+        key = default;
         entity = default;
         return false;
     }
@@ -83,10 +85,12 @@ public ref struct DueEnumerator<TKey>
     /// <summary>Advances to the next snapshot entry still in the index with its key within the bound; false when none is left.</summary>
     public bool MoveNext()
     {
+        if (store is null)
+            return false;
         var due = snapshot.Span;
         while (++at < due.Length)
         {
-            if (store!.IsDue(due[at], upTo, includeDetached))
+            if (store.IsDue(due[at], upTo, includeDetached))
                 return true;
         }
         return false;
@@ -154,14 +158,18 @@ internal sealed class OrderedStore<TKey> : IndexStore
 
     public int Count(bool includeDetached) => live.Count + (includeDetached ? detached.Count : 0);
 
-    public bool TryPeek(bool includeDetached, out TKey key, out Entity entity)
+    public bool TryPeek(
+        bool includeDetached,
+        [MaybeNullWhen(false)] out TKey key,
+        out Entity entity
+    )
     {
         var best = live.Count > 0 ? live.Ids[0] : -1;
         if (includeDetached && detached.Count > 0 && (best < 0 || Before(detached.Ids[0], best)))
             best = detached.Ids[0];
         if (best < 0)
         {
-            key = default!;
+            key = default;
             entity = default;
             return false;
         }
@@ -219,17 +227,34 @@ internal sealed class OrderedStore<TKey> : IndexStore
         return count;
     }
 
-    public override void Refresh(Entity entity) =>
-        Refresh(entity, reader.TryRead(world, entity, out var key), key);
+    public override void Refresh(Entity entity)
+    {
+        if (reader.TryRead(world, entity, out var key))
+            Refresh(entity, key);
+        else
+            Unkey(entity);
+    }
 
-    public override void Refresh(Entity entity, ref byte value) =>
-        Refresh(entity, reader.TryReadFrom(world, entity, ref value, out var key), key);
+    public override void Refresh(Entity entity, ref byte value)
+    {
+        if (reader.TryReadFrom(world, entity, ref value, out var key))
+            Refresh(entity, key);
+        else
+            Unkey(entity);
+    }
 
-    void Refresh(Entity entity, bool keyed, TKey key)
+    void Unkey(Entity entity)
+    {
+        var id = Own(entity);
+        if (id >= 0)
+            Drop(id);
+    }
+
+    void Refresh(Entity entity, TKey key)
     {
         var id = Own(entity);
         var lane = world.IndexLane(entity);
-        if (lane < 0 || !keyed)
+        if (lane < 0)
         {
             if (id >= 0)
                 Drop(id);

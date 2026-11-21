@@ -174,8 +174,8 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         newest = source.newest;
         Copies.Load(ref raised, source.raised, source.raisedCount);
         raisedCount = source.raisedCount;
-        if (owners is not null)
-            Copies.Load(owners, source.owners!);
+        if (owners is not null && source.owners is { } sourceOwners)
+            Copies.Load(owners, sourceOwners);
         ownerLists.Load(source.ownerLists);
     }
 
@@ -185,10 +185,9 @@ internal sealed class RowStore<TKey, TRow> : RowStore
 
     public override ref byte SlotRef(Entity owner, int slot)
     {
-        var block = BlockOf(owner)!;
-        return ref block.Dead[slot]
-            ? ref Unsafe.NullRef<byte>()
-            : ref Unsafe.As<TRow, byte>(ref block.Rows[slot]);
+        if (BlockOf(owner) is not { } block || block.Dead[slot])
+            return ref Unsafe.NullRef<byte>();
+        return ref Unsafe.As<TRow, byte>(ref block.Rows[slot]);
     }
 
     public override void CopyRows(Entity owner, Array into, int at)
@@ -284,7 +283,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         if (presence)
             block.Presence |= Bit(key);
         if (owners is not null)
-            AddOwner(key, block.Owner);
+            AddOwner(owners, key, block.Owner);
         world.changes.Append(LogKind.RowAdded, block.Owner, Type, reason);
         return at;
     }
@@ -398,7 +397,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             block.Presence &= ~Bit(key);
         block.Index?.Remove(key);
         if (owners is not null)
-            RemoveOwner(key, block.Owner);
+            RemoveOwner(owners, key, block.Owner);
         if (block.Iterating > 0)
         {
             block.Dead[at] = true;
@@ -521,16 +520,16 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         return bit != 0;
     }
 
-    void AddOwner(in TKey key, Entity entity)
+    void AddOwner(Dictionary<TKey, int> byKey, in TKey key, Entity entity)
     {
-        if (!owners!.TryGetValue(key, out var list))
-            owners[key] = list = ownerLists.New();
+        if (!byKey.TryGetValue(key, out var list))
+            byKey[key] = list = ownerLists.New();
         ownerLists.Add(list, entity);
     }
 
-    void RemoveOwner(in TKey key, Entity entity)
+    void RemoveOwner(Dictionary<TKey, int> byKey, in TKey key, Entity entity)
     {
-        if (!owners!.TryGetValue(key, out var list))
+        if (!byKey.TryGetValue(key, out var list))
             return;
         var at = ownerLists.Span(list).IndexOf(entity);
         if (at >= 0)
@@ -540,7 +539,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         if (ownerLists.Count(list) == 0)
         {
             ownerLists.Free(list);
-            owners.Remove(key);
+            byKey.Remove(key);
         }
     }
 

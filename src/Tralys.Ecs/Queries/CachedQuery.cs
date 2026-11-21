@@ -24,6 +24,7 @@ public sealed class CachedQuery
     int[] workCount = [];
     Entity[] workOwners = [];
     CommandBuffer[] workerBuffers = [];
+    int rentedWorkers;
     object? partials;
 
     internal CachedQuery(World world, QueryDesc desc)
@@ -211,9 +212,11 @@ public sealed class CachedQuery
         }
         foreach (var t in shape.SparseChanged)
         {
-            var storage = world.sparse[world.layout.SparseSlot[shape.Types[t]]];
-            var at = storage?.SlotOf(index) ?? -1;
-            if (at < 0 || storage!.Changed[at] <= since)
+            if (
+                world.sparse[world.layout.SparseSlot[shape.Types[t]]] is not { } storage
+                || storage.SlotOf(index) is not (var at and >= 0)
+                || storage.Changed[at] <= since
+            )
                 return false;
         }
         var m = entry.Match;
@@ -269,7 +272,7 @@ public sealed class CachedQuery
             if (driver is null || storage.Count < driver.Count)
                 driver = storage;
         }
-        return driver!.Count < MatchedRowCount;
+        return driver is not null && driver.Count < MatchedRowCount;
     }
 
     internal void AddToSnapshot(Entity entity)
@@ -618,8 +621,8 @@ public sealed class CachedQuery
     {
         if (workerBuffers.Length < workers)
             workerBuffers = new CommandBuffer[workers];
-        for (var w = 0; w < workers; w++)
-            workerBuffers[w] = world.RentBuffer(world.runSequence, 0);
+        for (rentedWorkers = 0; rentedWorkers < workers; rentedWorkers++)
+            workerBuffers[rentedWorkers] = world.RentBuffer(world.runSequence, 0);
         return workerBuffers;
     }
 
@@ -628,11 +631,10 @@ public sealed class CachedQuery
         world.parallelDepth--;
         if (world.iterationDepth > 0)
             world.iterationDepth--;
-        var conflict = completed ? world.ApplyIndexEdits(workerBuffers) : null;
-        for (var w = 0; w < workerBuffers.Length; w++)
+        var rented = workerBuffers.AsSpan(0, rentedWorkers);
+        var conflict = completed ? world.ApplyIndexEdits(rented) : null;
+        foreach (var buffer in rented)
         {
-            if (workerBuffers[w] is not { } buffer)
-                continue;
             world.chunksVisited += buffer.chunksVisited;
             world.chunksSkipped += buffer.chunksSkipped;
             buffer.chunksVisited = buffer.chunksSkipped = 0;
@@ -640,8 +642,9 @@ public sealed class CachedQuery
                 world.ReturnBuffer(buffer);
             else
                 world.Submit(buffer);
-            workerBuffers[w] = null!;
         }
+        rented.Clear();
+        rentedWorkers = 0;
         // Serial commands recorded later in the same system run play back after this run's chunk buffers.
         world.runSequence++;
         return conflict;
@@ -710,7 +713,7 @@ public sealed class CachedQuery
         if (workMatched[item] < 0)
         {
             ref var slot = ref world.allocator.Slots[workOwners[item].Index];
-            TryMatched(slot.Archetype!, out m);
+            TryMatched(slot.Placed, out m);
             start = slot.Row;
             count = 1;
             aligned = false;

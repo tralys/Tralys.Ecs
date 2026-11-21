@@ -48,8 +48,11 @@ static class BundleEmitter
             present.Add(Symbols.Name(field.Type));
             foreach (var attribute in field.Type.GetAttributes())
             {
-                if (Symbols.IsAttribute(attribute, Symbols.Requires))
-                    requirements.Add((field.Type, attribute.AttributeClass!.TypeArguments[0]));
+                if (
+                    Symbols.IsAttribute(attribute, Symbols.Requires)
+                    && attribute.AttributeClass is { TypeArguments.Length: 1 } requirement
+                )
+                    requirements.Add((field.Type, requirement.TypeArguments[0]));
             }
         }
         foreach (var (member, required) in requirements)

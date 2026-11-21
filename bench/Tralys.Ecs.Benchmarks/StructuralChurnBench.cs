@@ -5,14 +5,13 @@ namespace Tralys.Ecs.Benchmarks;
 [MemoryDiagnoser]
 public class StructuralChurnBench
 {
-    World world = null!;
+    readonly World world = Bench.World();
     readonly List<Entity> live = [];
     int tick;
 
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         for (var i = 0; i < 2000; i++)
             live.Add(world.Create(new PlayerBundle()));
     }

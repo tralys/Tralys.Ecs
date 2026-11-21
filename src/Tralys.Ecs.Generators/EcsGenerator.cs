@@ -30,8 +30,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                         .Assembly.GetAttributes()
                         .Where(a => Symbols.IsAttribute(a, Symbols.Instance))
                         .Select(a => ComponentModelBuilder.Instance(compilation, a))
-                        .Where(i => i is not null)
-                        .Select(i => i!),
+                        .OfType<InstanceModel>(),
                 ])
         );
         var assembly = context.CompilationProvider.Select(
@@ -81,8 +80,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                 static (node, _) => node is TypeDeclarationSyntax,
                 static (ctx, _) => BundleEmitter.Build(ctx)
             )
-            .Where(static b => b is not null)
-            .Select(static (b, _) => b!);
+            .WhereNotNull();
         context.RegisterSourceOutput(bundles, EmitBundle);
 
         foreach (
@@ -95,8 +93,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                     static (node, _) => node is MethodDeclarationSyntax,
                     (ctx, _) => QueryModelBuilder.Build(ctx, collect)
                 )
-                .Where(static q => q is not null)
-                .Select(static (q, _) => q!);
+                .WhereNotNull();
             context.RegisterSourceOutput(queries, EmitQuery);
         }
 
@@ -106,8 +103,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                 static (node, _) => node is ClassDeclarationSyntax,
                 static (ctx, _) => SystemModelBuilder.Build(ctx)
             )
-            .Where(static s => s is not null)
-            .Select(static (s, _) => s!);
+            .WhereNotNull();
         context.RegisterSourceOutput(systems, EmitSystem);
         var allSystems = systems
             .Collect()
@@ -119,8 +115,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                 static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
                 static (ctx, _) => ScheduleEmitter.Build(ctx)
             )
-            .Where(static s => s is not null)
-            .Select(static (s, _) => s!);
+            .WhereNotNull();
         context.RegisterSourceOutput(
             schedules.Combine(allSystems),
             static (ctx, pair) => ScheduleEmitter.Emit(ctx, pair.Left, pair.Right.Items)
@@ -132,8 +127,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                 static (node, _) => node is TypeDeclarationSyntax,
                 static (ctx, _) => ViewEmitter.Build(ctx)
             )
-            .Where(static v => v is not null)
-            .Select(static (v, _) => v!);
+            .WhereNotNull();
         context.RegisterSourceOutput(views, EmitView);
     }
 
@@ -172,8 +166,7 @@ public sealed class EcsGenerator : IIncrementalGenerator
                 static (node, _) => node is TypeDeclarationSyntax,
                 (ctx, _) => ComponentModelBuilder.Build(ctx, kind)
             )
-            .Where(static m => m is not null)
-            .Select(static (m, _) => m!);
+            .WhereNotNull();
 
     static void EmitType(SourceProductionContext context, TypeModel model)
     {
@@ -202,13 +195,13 @@ public sealed class EcsGenerator : IIncrementalGenerator
             .Declared.Types.Items.Where(t => t.CanEmit && !t.IsGenericDefinition)
             .OrderBy(t => t.DisplayName, StringComparer.Ordinal)
             .ToList();
-        var instances = new List<InstanceModel>();
+        var instances = new List<(InstanceModel Instance, TypeModel Definition)>();
         foreach (var instance in input.Declared.Instances.Items)
         {
             foreach (var problem in instance.Problems.Items)
                 problem.Report(context);
-            if (instance.Problems.Items.IsEmpty && instance.Definition is not null)
-                instances.Add(instance);
+            if (instance.Problems.Items.IsEmpty && instance.Definition is { } definition)
+                instances.Add((instance, definition));
         }
         if (types.Count == 0 && instances.Count == 0 && all.Referenced.Items.IsEmpty)
             return;

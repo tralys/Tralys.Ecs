@@ -55,12 +55,13 @@ public sealed class WorkerPool : IChunkExecutor, IDisposable
         threads = new Thread[workers];
         for (var i = 0; i < workers; i++)
         {
-            threads[i] = new Thread(Loop)
+            var worker = i + 1;
+            threads[i] = new Thread(() => Loop(worker))
             {
                 IsBackground = true,
-                Name = $"Tralys.Ecs worker {i + 1}",
+                Name = $"Tralys.Ecs worker {worker}",
             };
-            threads[i].Start(i + 1);
+            threads[i].Start();
         }
     }
 
@@ -184,9 +185,8 @@ public sealed class WorkerPool : IChunkExecutor, IDisposable
 
     static uint GenerationOf(long claim) => (uint)((ulong)claim >> 32);
 
-    void Loop(object? state)
+    void Loop(int worker)
     {
-        var worker = (int)state!;
         var seen = 0u;
         while (!stopping)
         {

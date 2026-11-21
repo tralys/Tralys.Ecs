@@ -25,7 +25,9 @@ public sealed class ArchetypeCapacityTests
         using var world = TestWorlds.Create();
         var entity = world.Create();
         world.Set(entity, new Position { X = 1 });
-        var archetype = world.allocator.Slots[entity.Index].Archetype!;
+        var archetype = await Assert
+            .That(world.allocator.Slots[entity.Index].Archetype)
+            .IsNotNull();
         world.Destroy(entity);
         world.Playback();
 

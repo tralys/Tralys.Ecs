@@ -5,14 +5,13 @@ namespace Tralys.Ecs.Benchmarks;
 [MemoryDiagnoser]
 public class EnableFlipBench
 {
-    World world = null!;
+    readonly World world = Bench.World();
     readonly List<Entity> live = [];
     int tick;
 
     [GlobalSetup]
     public void Setup()
     {
-        world = Bench.World();
         for (var i = 0; i < 2000; i++)
         {
             var entity = world.Create(new PlayerBundle());

@@ -34,13 +34,15 @@ public sealed partial class ObserverTests
         public void RunSet(Type set, ScheduledWork work) => Wrap($"set {set.Name}", work);
 
         public void RunSystem(SystemDescriptor system, ScheduledWork work) =>
-            Wrap($"run {system.Type!.Name}", work);
+            Wrap($"run {ClassName(system)}", work);
 
         public void RunPlayback(string point, ScheduledWork work) =>
             Wrap($"playback {point}", work);
 
         public void OnSystemSkipped(SystemDescriptor system, SystemSkip reason) =>
-            Log.Add($"skip {system.Type!.Name} {reason}");
+            Log.Add($"skip {ClassName(system)} {reason}");
+
+        static string ClassName(SystemDescriptor system) => system.Type?.Name ?? system.Name;
 
         void Wrap(string what, ScheduledWork work)
         {

@@ -40,7 +40,7 @@ public sealed class DuplicateDeclarationAnalyzer : DiagnosticAnalyzer
                 {
                     if (
                         !Symbols.IsAttribute(attribute, Symbols.Instance)
-                        || attribute.AttributeClass!.TypeArguments.FirstOrDefault()
+                        || attribute.AttributeClass?.TypeArguments.FirstOrDefault()
                             is not { } closed
                     )
                         continue;
