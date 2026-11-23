@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
     branches: [master]
+  workflow_call:
+    inputs:
+      version:
+        description: Package version; empty packs VersionPrefix with a ci suffix
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -39,9 +46,19 @@ jobs:
           dotnet tool restore
           dotnet csharpier check .
 
+      - name: Version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            echo "VERSION_ARGS=-p:Version=$VERSION" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_ARGS=-p:VersionSuffix=ci.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          fi
+
       - run: dotnet restore Tralys.Ecs.slnx
 
-      - run: dotnet build Tralys.Ecs.slnx -c Release --no-restore
+      - run: dotnet build Tralys.Ecs.slnx -c Release --no-restore "$VERSION_ARGS"
 
       - name: Test
         run: |
@@ -56,3 +73,14 @@ jobs:
         run: |
           dotnet publish tests/Tralys.Ecs.Aot.Smoke -c Release
           tests/Tralys.Ecs.Aot.Smoke/bin/Release/net11.0/${{ matrix.rid }}/publish/Tralys.Ecs.Aot.Smoke
+
+      - name: Pack
+        if: matrix.rid == 'linux-x64'
+        run: dotnet pack Tralys.Ecs.slnx -c Release --no-build -o artifacts/packages "$VERSION_ARGS"
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.rid == 'linux-x64'
+        with:
+          name: packages
+          path: artifacts/packages/
+          retention-days: 7

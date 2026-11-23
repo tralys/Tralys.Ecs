@@ -4,6 +4,7 @@
     <IsTrimmable>true</IsTrimmable>
     <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
     <IsPackable>true</IsPackable>
+    <Description>WorkerPool for Tralys.Ecs: dedicated worker threads for parallel queries.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -4,6 +4,7 @@
     <IsTrimmable>true</IsTrimmable>
     <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
     <IsPackable>true</IsPackable>
+    <Description>Test helpers for Tralys.Ecs: WorldHarness, WorldDiff, AllocationAssert and ShuffledExecutor, for determinism and allocation tests.</Description>
   </PropertyGroup>
 
   <ItemGroup>

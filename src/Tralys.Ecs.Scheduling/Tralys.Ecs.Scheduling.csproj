@@ -4,6 +4,7 @@
     <IsTrimmable>true</IsTrimmable>
     <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
     <IsPackable>true</IsPackable>
+    <Description>Schedules for Tralys.Ecs: systems in sets, run conditions, cadences, fault quarantine, playback points and schedule observers.</Description>
   </PropertyGroup>
 
   <ItemGroup>

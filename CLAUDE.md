@@ -8,6 +8,10 @@ A source-generated C# ECS (.NET 11, NativeAOT, no reflection in the core). Packa
 - `dotnet run --project tests/Tralys.Ecs.Tests --no-build`, and the same for `tests/Tralys.Ecs.Generators.Tests` and `tests/Tralys.Ecs.Scheduling.Tests`.
 - `dotnet run --project tests/Tralys.Ecs.Aot.Smoke --no-build`; CI also runs `dotnet publish tests/Tralys.Ecs.Aot.Smoke -c Release` and the published binary.
 
+## Release
+
+- Give `CHANGELOG.md` a `## [version]` section and move every `PublicAPI.Unshipped.txt` entry into `PublicAPI.Shipped.txt`, then push `v<version>` from `master`. `release.yml` runs CI with that version, publishes to nuget.org and cuts the GitHub Release from the section; a `-` in the tag makes a prerelease.
+
 ## Rules the build enforces
 
 - **Public API listing.** Each package has `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt`. A public change fails the build (RS0016/RS0017) until the list is updated: `dotnet format analyzers <csproj> --diagnostics RS0016 --severity warn`, then delete stale lines by hand.

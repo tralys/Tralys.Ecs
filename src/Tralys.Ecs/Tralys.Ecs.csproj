@@ -5,6 +5,7 @@
     <IsTrimmable>true</IsTrimmable>
     <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
     <IsPackable>true</IsPackable>
+    <Description>A source-generated entity component system: worlds, archetype storage, relations, hierarchy, commands, observers and change tracking, with its generator and analyzers.</Description>
     <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackGenerator</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
 
