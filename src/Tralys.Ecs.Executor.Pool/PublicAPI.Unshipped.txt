@@ -1,6 +1,1 @@
 #nullable enable
-Tralys.Ecs.WorkerPool
-Tralys.Ecs.WorkerPool.Dispose() -> void
-Tralys.Ecs.WorkerPool.Run<TJob>(ref TJob job, int itemCount) -> void
-Tralys.Ecs.WorkerPool.WorkerCount.get -> int
-Tralys.Ecs.WorkerPool.WorkerPool(int workers = 0, System.TimeSpan? spin = null) -> void

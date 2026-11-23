@@ -1,1 +1,1426 @@
 #nullable enable
+Tralys.Ecs.AliasAttribute
+Tralys.Ecs.AliasAttribute.AliasAttribute(string! name) -> void
+Tralys.Ecs.AliasAttribute.Name.get -> string!
+Tralys.Ecs.AnyOfAttribute<T>
+Tralys.Ecs.AnyOfAttribute<T>.AnyOfAttribute() -> void
+Tralys.Ecs.AnyOfAttribute<T>.Group.get -> int
+Tralys.Ecs.AnyOfAttribute<T>.Group.set -> void
+Tralys.Ecs.ArchetypeInfo
+Tralys.Ecs.ArchetypeInfo.AllocatedRows.get -> int
+Tralys.Ecs.ArchetypeInfo.ArchetypeInfo() -> void
+Tralys.Ecs.ArchetypeInfo.BytesPerChunk.get -> int
+Tralys.Ecs.ArchetypeInfo.ChunkCapacity.get -> int
+Tralys.Ecs.ArchetypeInfo.ChunkCount.get -> int
+Tralys.Ecs.ArchetypeInfo.Detached.get -> bool
+Tralys.Ecs.ArchetypeInfo.Entities.get -> System.ReadOnlySpan<Tralys.Ecs.Entity>
+Tralys.Ecs.ArchetypeInfo.EntityCount.get -> int
+Tralys.Ecs.ArchetypeInfo.Fill.get -> double
+Tralys.Ecs.ArchetypeInfo.Id.get -> int
+Tralys.Ecs.ArchetypeInfo.Types.get -> System.ReadOnlySpan<int>
+Tralys.Ecs.ArgAttribute
+Tralys.Ecs.ArgAttribute.ArgAttribute() -> void
+Tralys.Ecs.AttributedLog
+Tralys.Ecs.AttributedLog.Capacity.get -> int
+Tralys.Ecs.AttributedLog.Count.get -> int
+Tralys.Ecs.AttributedLog.TryFindLast(Tralys.Ecs.Entity entity, Tralys.Ecs.LogKind kind, out Tralys.Ecs.AttributedLogEntry entry, int type = -1) -> bool
+Tralys.Ecs.AttributedLog.this[int index].get -> Tralys.Ecs.AttributedLogEntry
+Tralys.Ecs.AttributedLogEntry
+Tralys.Ecs.AttributedLogEntry.AttributedLogEntry() -> void
+Tralys.Ecs.AttributedLogEntry.AttributedLogEntry(Tralys.Ecs.LogEntry Entry, Tralys.Ecs.SystemId Executing, Tralys.Ecs.SystemId Origin, Tralys.Ecs.CallSite ChangedBy) -> void
+Tralys.Ecs.AttributedLogEntry.ChangedBy.get -> Tralys.Ecs.CallSite
+Tralys.Ecs.AttributedLogEntry.ChangedBy.init -> void
+Tralys.Ecs.AttributedLogEntry.Deconstruct(out Tralys.Ecs.LogEntry Entry, out Tralys.Ecs.SystemId Executing, out Tralys.Ecs.SystemId Origin, out Tralys.Ecs.CallSite ChangedBy) -> void
+Tralys.Ecs.AttributedLogEntry.Entry.get -> Tralys.Ecs.LogEntry
+Tralys.Ecs.AttributedLogEntry.Entry.init -> void
+Tralys.Ecs.AttributedLogEntry.Equals(Tralys.Ecs.AttributedLogEntry other) -> bool
+Tralys.Ecs.AttributedLogEntry.Executing.get -> Tralys.Ecs.SystemId
+Tralys.Ecs.AttributedLogEntry.Executing.init -> void
+Tralys.Ecs.AttributedLogEntry.Origin.get -> Tralys.Ecs.SystemId
+Tralys.Ecs.AttributedLogEntry.Origin.init -> void
+Tralys.Ecs.BufferArena<T>
+Tralys.Ecs.BufferArena<T>.Allocate(int length) -> Tralys.Ecs.BufferHandle<T>
+Tralys.Ecs.BufferArena<T>.Free(Tralys.Ecs.BufferHandle<T> handle) -> bool
+Tralys.Ecs.BufferArena<T>.Get(Tralys.Ecs.BufferHandle<T> handle) -> System.Span<T>
+Tralys.Ecs.BufferArena<T>.LiveCount.get -> int
+Tralys.Ecs.BufferArena<T>.Resize(Tralys.Ecs.BufferHandle<T> handle, int length) -> void
+Tralys.Ecs.BufferArena<T>.TryGet(Tralys.Ecs.BufferHandle<T> handle, out System.Span<T> span) -> bool
+Tralys.Ecs.BufferHandle<T>
+Tralys.Ecs.BufferHandle<T>.BufferHandle() -> void
+Tralys.Ecs.BufferHandle<T>.Equals(Tralys.Ecs.BufferHandle<T> other) -> bool
+Tralys.Ecs.BufferHandle<T>.IsNull.get -> bool
+Tralys.Ecs.BundleAttribute
+Tralys.Ecs.BundleAttribute.BundleAttribute() -> void
+Tralys.Ecs.CachedQuery
+Tralys.Ecs.CachedQuery.ChunkEnumerator
+Tralys.Ecs.CachedQuery.ChunkEnumerator.ChunkEnumerator() -> void
+Tralys.Ecs.CachedQuery.ChunkEnumerator.Current.get -> Tralys.Ecs.ChunkView
+Tralys.Ecs.CachedQuery.ChunkEnumerator.Dispose() -> void
+Tralys.Ecs.CachedQuery.ChunkEnumerator.MoveNext() -> bool
+Tralys.Ecs.CachedQuery.Collect<TKernel, TAction>(ref TKernel kernel, ref TAction action) -> void
+Tralys.Ecs.CachedQuery.Count() -> int
+Tralys.Ecs.CachedQuery.Desc.get -> Tralys.Ecs.QueryDesc!
+Tralys.Ecs.CachedQuery.GetEnumerator() -> Tralys.Ecs.CachedQuery.ChunkEnumerator
+Tralys.Ecs.CachedQuery.MatchedArchetypeCount.get -> int
+Tralys.Ecs.CachedQuery.Reduce<TAccumulator, TKernel>(ref TKernel kernel) -> TAccumulator
+Tralys.Ecs.CachedQuery.ReduceFor<TAccumulator, TKernel>(ref TKernel kernel, System.ReadOnlySpan<Tralys.Ecs.Entity> entities) -> TAccumulator
+Tralys.Ecs.CachedQuery.ReduceParallel<TAccumulator, TKernel>(ref TKernel kernel) -> TAccumulator
+Tralys.Ecs.CachedQuery.Run<TKernel>(ref TKernel kernel) -> void
+Tralys.Ecs.CachedQuery.RunDepthOrdered<TKernel>(ref TKernel kernel) -> void
+Tralys.Ecs.CachedQuery.RunFor<TKernel>(ref TKernel kernel, System.ReadOnlySpan<Tralys.Ecs.Entity> entities) -> void
+Tralys.Ecs.CachedQuery.RunParallel<TKernel>(ref TKernel kernel) -> void
+Tralys.Ecs.CachedQuery.World.get -> Tralys.Ecs.World!
+Tralys.Ecs.CallSite
+Tralys.Ecs.CallSite.CallSite() -> void
+Tralys.Ecs.CallSite.CallSite(string? File, int Line) -> void
+Tralys.Ecs.CallSite.Deconstruct(out string? File, out int Line) -> void
+Tralys.Ecs.CallSite.Equals(Tralys.Ecs.CallSite other) -> bool
+Tralys.Ecs.CallSite.File.get -> string?
+Tralys.Ecs.CallSite.File.init -> void
+Tralys.Ecs.CallSite.IsKnown.get -> bool
+Tralys.Ecs.CallSite.Line.get -> int
+Tralys.Ecs.CallSite.Line.init -> void
+Tralys.Ecs.CaptureAttribute
+Tralys.Ecs.CaptureAttribute.CaptureAttribute(Tralys.Ecs.CapturePolicy policy) -> void
+Tralys.Ecs.CaptureAttribute.Policy.get -> Tralys.Ecs.CapturePolicy
+Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureExclusions.Buffers = 16 -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureExclusions.Children = 1 -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureExclusions.EntityFields = 4 -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureExclusions.None = 0 -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureExclusions.Relations = 2 -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureExclusions.Rows = 8 -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureImage
+Tralys.Ecs.CaptureImage.EntityCount.get -> int
+Tralys.Ecs.CaptureImage.ExternalRefs.get -> System.ReadOnlySpan<Tralys.Ecs.ExternalRef>
+Tralys.Ecs.CaptureImage.SourceEntities.get -> System.ReadOnlySpan<Tralys.Ecs.Entity>
+Tralys.Ecs.CaptureImage.Write(System.IO.Stream! stream) -> void
+Tralys.Ecs.CaptureOptions
+Tralys.Ecs.CaptureOptions.Boundary.get -> Tralys.Ecs.ICaptureBoundary?
+Tralys.Ecs.CaptureOptions.Boundary.init -> void
+Tralys.Ecs.CaptureOptions.CaptureOptions() -> void
+Tralys.Ecs.CaptureOptions.Categories.get -> Tralys.Ecs.CategoryMask
+Tralys.Ecs.CaptureOptions.Categories.init -> void
+Tralys.Ecs.CaptureOptions.Equals(Tralys.Ecs.CaptureOptions other) -> bool
+Tralys.Ecs.CaptureOptions.Exclude.get -> Tralys.Ecs.CaptureExclusions
+Tralys.Ecs.CaptureOptions.Exclude.init -> void
+Tralys.Ecs.CaptureOptions.Translator.get -> Tralys.Ecs.IExternalRefTranslator?
+Tralys.Ecs.CaptureOptions.Translator.init -> void
+Tralys.Ecs.CapturePolicy
+Tralys.Ecs.CapturePolicy.Copy = 0 -> Tralys.Ecs.CapturePolicy
+Tralys.Ecs.CapturePolicy.Rebase = 2 -> Tralys.Ecs.CapturePolicy
+Tralys.Ecs.CapturePolicy.Skip = 1 -> Tralys.Ecs.CapturePolicy
+Tralys.Ecs.CategoryMask
+Tralys.Ecs.CategoryMask.Bits.get -> ulong
+Tralys.Ecs.CategoryMask.Bits.init -> void
+Tralys.Ecs.CategoryMask.CategoryMask() -> void
+Tralys.Ecs.CategoryMask.CategoryMask(ulong Bits) -> void
+Tralys.Ecs.CategoryMask.Deconstruct(out ulong Bits) -> void
+Tralys.Ecs.CategoryMask.Equals(Tralys.Ecs.CategoryMask other) -> bool
+Tralys.Ecs.CategoryMask.Matches(ulong categories) -> bool
+Tralys.Ecs.ChangeSample
+Tralys.Ecs.ChangeSample.ChangeSample() -> void
+Tralys.Ecs.ChangeSample.Changed<T>() -> Tralys.Ecs.ChangedValues<T>
+Tralys.Ecs.ChangeSample.ChangedRows<TKey, TRow>() -> Tralys.Ecs.ChangedRows<TKey, TRow>
+Tralys.Ecs.ChangeSample.Since.get -> ulong
+Tralys.Ecs.ChangeSample.Until.get -> ulong
+Tralys.Ecs.ChangeSet<TBits>
+Tralys.Ecs.ChangeSet<TBits>.ChangeSet() -> void
+Tralys.Ecs.ChangeSet<TBits>.Clear() -> void
+Tralys.Ecs.ChangeSet<TBits>.Count.get -> int
+Tralys.Ecs.ChangeSet<TBits>.Enumerator
+Tralys.Ecs.ChangeSet<TBits>.Enumerator.Current.get -> (Tralys.Ecs.Entity Entity, TBits Owed)
+Tralys.Ecs.ChangeSet<TBits>.Enumerator.Enumerator() -> void
+Tralys.Ecs.ChangeSet<TBits>.Enumerator.MoveNext() -> bool
+Tralys.Ecs.ChangeSet<TBits>.Forget(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.ChangeSet<TBits>.GetEnumerator() -> Tralys.Ecs.ChangeSet<TBits>.Enumerator
+Tralys.Ecs.ChangeSet<TBits>.IsMarked(Tralys.Ecs.Entity entity, TBits bits) -> bool
+Tralys.Ecs.ChangeSet<TBits>.Mark(Tralys.Ecs.Entity entity, TBits bits) -> void
+Tralys.Ecs.ChangeSet<TBits>.MarksOf(Tralys.Ecs.Entity entity) -> TBits
+Tralys.Ecs.ChangeSet<TBits>.Unmark(Tralys.Ecs.Entity entity, TBits bits) -> void
+Tralys.Ecs.ChangeTracking
+Tralys.Ecs.ChangeTracking.AddedVersionOf<T>(Tralys.Ecs.Entity entity) -> ulong
+Tralys.Ecs.ChangeTracking.Commit(Tralys.Ecs.CursorId cursor, ulong upTo) -> void
+Tralys.Ecs.ChangeTracking.DescendantVersionOf(Tralys.Ecs.Entity root) -> ulong
+Tralys.Ecs.ChangeTracking.NameOf(Tralys.Ecs.CursorId cursor) -> string!
+Tralys.Ecs.ChangeTracking.Register(string! name, in Tralys.Ecs.CursorOptions options = default(Tralys.Ecs.CursorOptions)) -> Tralys.Ecs.CursorId
+Tralys.Ecs.ChangeTracking.RelatedVersionOf<R>(Tralys.Ecs.Entity source) -> ulong
+Tralys.Ecs.ChangeTracking.Sample(Tralys.Ecs.CursorId cursor) -> Tralys.Ecs.ChangeSample
+Tralys.Ecs.ChangeTracking.Unregister(Tralys.Ecs.CursorId cursor) -> void
+Tralys.Ecs.ChangeTracking.VersionOf<T>(Tralys.Ecs.Entity entity) -> ulong
+Tralys.Ecs.ChangeTracking.VersionOf<TKey, TRow>(Tralys.Ecs.Entity owner, in TKey key) -> ulong
+Tralys.Ecs.ChangeTracking.Watch<TBits, TScope>(string! name, System.Action<Tralys.Ecs.WatchBuilder<TBits>!>! declare) -> Tralys.Ecs.ChangeWatch<TBits>!
+Tralys.Ecs.ChangeWatch<TBits>
+Tralys.Ecs.ChangeWatch<TBits>.Collect(Tralys.Ecs.ChangeSet<TBits>! into) -> void
+Tralys.Ecs.ChangeWatch<TBits>.Dispose() -> void
+Tralys.Ecs.ChangedAttribute<T>
+Tralys.Ecs.ChangedAttribute<T>.ChangedAttribute() -> void
+Tralys.Ecs.ChangedRow<TKey, TRow>
+Tralys.Ecs.ChangedRow<TKey, TRow>.Added.get -> bool
+Tralys.Ecs.ChangedRow<TKey, TRow>.ChangedRow() -> void
+Tralys.Ecs.ChangedRow<TKey, TRow>.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.ChangedRow<TKey, TRow>.Key.get -> TKey
+Tralys.Ecs.ChangedRow<TKey, TRow>.Value.get -> TRow
+Tralys.Ecs.ChangedRow<TKey, TRow>.Version.get -> ulong
+Tralys.Ecs.ChangedRows<TKey, TRow>
+Tralys.Ecs.ChangedRows<TKey, TRow>.ChangedRows() -> void
+Tralys.Ecs.ChangedRows<TKey, TRow>.Enumerator
+Tralys.Ecs.ChangedRows<TKey, TRow>.Enumerator.Current.get -> Tralys.Ecs.ChangedRow<TKey, TRow>
+Tralys.Ecs.ChangedRows<TKey, TRow>.Enumerator.Dispose() -> void
+Tralys.Ecs.ChangedRows<TKey, TRow>.Enumerator.Enumerator() -> void
+Tralys.Ecs.ChangedRows<TKey, TRow>.Enumerator.MoveNext() -> bool
+Tralys.Ecs.ChangedRows<TKey, TRow>.GetEnumerator() -> Tralys.Ecs.ChangedRows<TKey, TRow>.Enumerator
+Tralys.Ecs.ChangedValue<T>
+Tralys.Ecs.ChangedValue<T>.Added.get -> bool
+Tralys.Ecs.ChangedValue<T>.ChangedValue() -> void
+Tralys.Ecs.ChangedValue<T>.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.ChangedValue<T>.Value.get -> T
+Tralys.Ecs.ChangedValue<T>.Version.get -> ulong
+Tralys.Ecs.ChangedValues<T>
+Tralys.Ecs.ChangedValues<T>.ChangedValues() -> void
+Tralys.Ecs.ChangedValues<T>.Enumerator
+Tralys.Ecs.ChangedValues<T>.Enumerator.Current.get -> Tralys.Ecs.ChangedValue<T>
+Tralys.Ecs.ChangedValues<T>.Enumerator.Enumerator() -> void
+Tralys.Ecs.ChangedValues<T>.Enumerator.MoveNext() -> bool
+Tralys.Ecs.ChangedValues<T>.GetEnumerator() -> Tralys.Ecs.ChangedValues<T>.Enumerator
+Tralys.Ecs.ChunkContext
+Tralys.Ecs.ChunkContext.ChunkContext() -> void
+Tralys.Ecs.ChunkContext.ChunkContext(Tralys.Ecs.World! world, int chunkIndex, int worker) -> void
+Tralys.Ecs.ChunkContext.ChunkIndex.get -> int
+Tralys.Ecs.ChunkContext.Worker.get -> int
+Tralys.Ecs.ChunkContext.World.get -> Tralys.Ecs.World!
+Tralys.Ecs.ChunkView
+Tralys.Ecs.ChunkView.ChunkIndexInQuery.get -> int
+Tralys.Ecs.ChunkView.ChunkView() -> void
+Tralys.Ecs.ChunkView.Commands.get -> Tralys.Ecs.Commands
+Tralys.Ecs.ChunkView.Context.get -> Tralys.Ecs.ChunkContext
+Tralys.Ecs.ChunkView.Count.get -> int
+Tralys.Ecs.ChunkView.Entities.get -> System.ReadOnlySpan<Tralys.Ecs.Entity>
+Tralys.Ecs.ChunkView.Has<T>() -> bool
+Tralys.Ecs.ChunkView.IsEnabled<T>(int row) -> bool
+Tralys.Ecs.ChunkView.Read<T>() -> System.ReadOnlySpan<T>
+Tralys.Ecs.ChunkView.Rows.get -> Tralys.Ecs.RowSet
+Tralys.Ecs.ChunkView.Sparse<T>() -> Tralys.Ecs.SparseTerm<T>
+Tralys.Ecs.ChunkView.Stop() -> void
+Tralys.Ecs.ChunkView.Worker.get -> int
+Tralys.Ecs.ChunkView.World.get -> Tralys.Ecs.World!
+Tralys.Ecs.ChunkView.Write<T>() -> Tralys.Ecs.TrackedSpan<T>
+Tralys.Ecs.ChunkView.WriteUntracked<T>() -> System.Span<T>
+Tralys.Ecs.CollectAttribute
+Tralys.Ecs.CollectAttribute.Act.get -> string!
+Tralys.Ecs.CollectAttribute.Act.set -> void
+Tralys.Ecs.CollectAttribute.CollectAttribute() -> void
+Tralys.Ecs.ColumnEdit<T>
+Tralys.Ecs.ColumnEdit<T>.ColumnEdit() -> void
+Tralys.Ecs.ColumnEdit<T>.Dispose() -> void
+Tralys.Ecs.ColumnEdit<T>.Value.get -> T
+Tralys.Ecs.CommandRejectedException
+Tralys.Ecs.CommandRejectedException.Rejections.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Tralys.Ecs.CommandRows<TKey, TRow>
+Tralys.Ecs.CommandRows<TKey, TRow>.CommandRows() -> void
+Tralys.Ecs.CommandRows<TKey, TRow>.Remove(in TKey key, string! file = "", int line = 0) -> void
+Tralys.Ecs.CommandRows<TKey, TRow>.Set(in TRow row, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands
+Tralys.Ecs.Commands.Add<T>(Tralys.Ecs.Entity entity, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.CancelDestroy(Tralys.Ecs.Entity entity, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.ClearParent(Tralys.Ecs.Entity child, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.ClearSources<R>(Tralys.Ecs.Entity target, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.ClearTargets<R>(Tralys.Ecs.Entity source, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Commands() -> void
+Tralys.Ecs.Commands.Create(string! file = "", int line = 0) -> Tralys.Ecs.Entity
+Tralys.Ecs.Commands.Create<TBundle>(in TBundle bundle, string! file = "", int line = 0) -> Tralys.Ecs.Entity
+Tralys.Ecs.Commands.Destroy(Tralys.Ecs.Entity entity, Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Detach(Tralys.Ecs.Entity entity, Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Reattach(Tralys.Ecs.Entity entity, Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Relate<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, in R payload = default(R), string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Remove<T>(Tralys.Ecs.Entity entity, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Retarget<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity oldTarget, Tralys.Ecs.Entity newTarget, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Set<T>(Tralys.Ecs.Entity entity, in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.SetEnabled<T>(Tralys.Ecs.Entity entity, bool enabled, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.SetOrRemove<T>(Tralys.Ecs.Entity entity, in T? value, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.SetParent(Tralys.Ecs.Entity child, Tralys.Ecs.Entity parent, int index = -1, string! file = "", int line = 0) -> void
+Tralys.Ecs.Commands.Unrelate<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, string! file = "", int line = 0) -> void
+Tralys.Ecs.ComponentAttribute
+Tralys.Ecs.ComponentAttribute.ComponentAttribute() -> void
+Tralys.Ecs.ComponentAttribute.SchemaVersion.get -> int
+Tralys.Ecs.ComponentAttribute.SchemaVersion.set -> void
+Tralys.Ecs.ComponentCategoryAttribute
+Tralys.Ecs.ComponentCategoryAttribute.Bit.get -> int
+Tralys.Ecs.ComponentCategoryAttribute.Bit.set -> void
+Tralys.Ecs.ComponentCategoryAttribute.ComponentCategoryAttribute() -> void
+Tralys.Ecs.ComponentDescriptor
+Tralys.Ecs.ComponentDescriptor.Aliases.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Tralys.Ecs.ComponentDescriptor.Alignment.get -> int
+Tralys.Ecs.ComponentDescriptor.BufferHandleOffsets.get -> System.ReadOnlySpan<int>
+Tralys.Ecs.ComponentDescriptor.Categories.get -> ulong
+Tralys.Ecs.ComponentDescriptor.EntityRefOffsets.get -> System.ReadOnlySpan<int>
+Tralys.Ecs.ComponentDescriptor.Fields.get -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.FieldDescriptor!>!
+Tralys.Ecs.ComponentDescriptor.Index.get -> int
+Tralys.Ecs.ComponentDescriptor.Indexes.get -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.IndexDeclaration!>!
+Tralys.Ecs.ComponentDescriptor.IsEnableable.get -> bool
+Tralys.Ecs.ComponentDescriptor.IsManaged.get -> bool
+Tralys.Ecs.ComponentDescriptor.IsSparse.get -> bool
+Tralys.Ecs.ComponentDescriptor.IsTag.get -> bool
+Tralys.Ecs.ComponentDescriptor.IsTracked.get -> bool
+Tralys.Ecs.ComponentDescriptor.KeyField.get -> string?
+Tralys.Ecs.ComponentDescriptor.Kind.get -> Tralys.Ecs.DescriptorKind
+Tralys.Ecs.ComponentDescriptor.Name.get -> string!
+Tralys.Ecs.ComponentDescriptor.OnTargetDestroyed.get -> Tralys.Ecs.TargetPolicy
+Tralys.Ecs.ComponentDescriptor.Passthrough.get -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.PassthroughUse!>!
+Tralys.Ecs.ComponentDescriptor.RelationTraits.get -> Tralys.Ecs.RelationTraits
+Tralys.Ecs.ComponentDescriptor.Requires.get -> System.ReadOnlySpan<int>
+Tralys.Ecs.ComponentDescriptor.SchemaVersion.get -> int
+Tralys.Ecs.ComponentDescriptor.Size.get -> int
+Tralys.Ecs.ComponentDescriptor.Storage.get -> Tralys.Ecs.StorageKind
+Tralys.Ecs.ComponentDescriptor.Traits.get -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.ComponentEdit<T>.ComponentEdit() -> void
+Tralys.Ecs.ComponentEdit<T>.Dispose() -> void
+Tralys.Ecs.ComponentEdit<T>.HasValue.get -> bool
+Tralys.Ecs.ComponentEdit<T>.Value.get -> T
+Tralys.Ecs.ComponentInstanceAttribute<T>
+Tralys.Ecs.ComponentInstanceAttribute<T>.ComponentInstanceAttribute() -> void
+Tralys.Ecs.ComponentInstanceAttribute<T>.SchemaVersion.get -> int
+Tralys.Ecs.ComponentInstanceAttribute<T>.SchemaVersion.set -> void
+Tralys.Ecs.ComponentModule
+Tralys.Ecs.ComponentModule.Assembly.get -> string!
+Tralys.Ecs.ComponentModule.ComponentModule(string! assembly, Tralys.Ecs.ComponentDescriptor![]! descriptors) -> void
+Tralys.Ecs.ComponentModule.Descriptors.get -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.ComponentDescriptor!>!
+Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.Enableable = 2 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.InheritedTag = 64 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.None = 0 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.PresenceMask = 128 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.PropagateToAncestors = 16 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.PropagateToRelationSources = 32 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.ReplaceOnly = 4 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.ReverseKeyIndex = 256 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.Singleton = 8 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ComponentTraits.Tracked = 1 -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.ConflictPolicy
+Tralys.Ecs.ConflictPolicy.KeepExisting = 1 -> Tralys.Ecs.ConflictPolicy
+Tralys.Ecs.ConflictPolicy.ReplaceExisting = 2 -> Tralys.Ecs.ConflictPolicy
+Tralys.Ecs.ConflictPolicy.Throw = 0 -> Tralys.Ecs.ConflictPolicy
+Tralys.Ecs.CursorId
+Tralys.Ecs.CursorId.CursorId() -> void
+Tralys.Ecs.CursorId.Equals(Tralys.Ecs.CursorId other) -> bool
+Tralys.Ecs.CursorOptions
+Tralys.Ecs.CursorOptions.CursorOptions() -> void
+Tralys.Ecs.CursorOptions.Equals(Tralys.Ecs.CursorOptions other) -> bool
+Tralys.Ecs.CursorOptions.IncludeDetached.get -> bool
+Tralys.Ecs.CursorOptions.IncludeDetached.init -> void
+Tralys.Ecs.CursorOptions.IncludePendingDestroy.get -> bool
+Tralys.Ecs.CursorOptions.IncludePendingDestroy.init -> void
+Tralys.Ecs.DanglingReference
+Tralys.Ecs.DanglingReference.DanglingReference() -> void
+Tralys.Ecs.DanglingReference.DanglingReference(Tralys.Ecs.Entity Holder, Tralys.Ecs.ComponentDescriptor! Type, Tralys.Ecs.ReferenceHolder Kind, int Offset, int Element, string? Field, Tralys.Ecs.Entity Target) -> void
+Tralys.Ecs.DanglingReference.Deconstruct(out Tralys.Ecs.Entity Holder, out Tralys.Ecs.ComponentDescriptor! Type, out Tralys.Ecs.ReferenceHolder Kind, out int Offset, out int Element, out string? Field, out Tralys.Ecs.Entity Target) -> void
+Tralys.Ecs.DanglingReference.Element.get -> int
+Tralys.Ecs.DanglingReference.Element.init -> void
+Tralys.Ecs.DanglingReference.Equals(Tralys.Ecs.DanglingReference other) -> bool
+Tralys.Ecs.DanglingReference.Field.get -> string?
+Tralys.Ecs.DanglingReference.Field.init -> void
+Tralys.Ecs.DanglingReference.Holder.get -> Tralys.Ecs.Entity
+Tralys.Ecs.DanglingReference.Holder.init -> void
+Tralys.Ecs.DanglingReference.Kind.get -> Tralys.Ecs.ReferenceHolder
+Tralys.Ecs.DanglingReference.Kind.init -> void
+Tralys.Ecs.DanglingReference.Offset.get -> int
+Tralys.Ecs.DanglingReference.Offset.init -> void
+Tralys.Ecs.DanglingReference.Target.get -> Tralys.Ecs.Entity
+Tralys.Ecs.DanglingReference.Target.init -> void
+Tralys.Ecs.DanglingReference.Type.get -> Tralys.Ecs.ComponentDescriptor!
+Tralys.Ecs.DanglingReference.Type.init -> void
+Tralys.Ecs.DanglingReferenceException
+Tralys.Ecs.DanglingReferenceException.Count.get -> int
+Tralys.Ecs.DanglingReferenceException.DanglingReferenceException(Tralys.Ecs.DanglingReference first, int count) -> void
+Tralys.Ecs.DanglingReferenceException.First.get -> Tralys.Ecs.DanglingReference
+Tralys.Ecs.DeferredRef
+Tralys.Ecs.DeferredRef.Deconstruct(out Tralys.Ecs.Entity Owner, out int Type, out int Row, out int Offset, out int Element, out Tralys.Ecs.ExternalRef Reference) -> void
+Tralys.Ecs.DeferredRef.DeferredRef() -> void
+Tralys.Ecs.DeferredRef.DeferredRef(Tralys.Ecs.Entity Owner, int Type, int Row, int Offset, int Element, Tralys.Ecs.ExternalRef Reference) -> void
+Tralys.Ecs.DeferredRef.Element.get -> int
+Tralys.Ecs.DeferredRef.Element.init -> void
+Tralys.Ecs.DeferredRef.Equals(Tralys.Ecs.DeferredRef other) -> bool
+Tralys.Ecs.DeferredRef.Offset.get -> int
+Tralys.Ecs.DeferredRef.Offset.init -> void
+Tralys.Ecs.DeferredRef.Owner.get -> Tralys.Ecs.Entity
+Tralys.Ecs.DeferredRef.Owner.init -> void
+Tralys.Ecs.DeferredRef.Reference.get -> Tralys.Ecs.ExternalRef
+Tralys.Ecs.DeferredRef.Reference.init -> void
+Tralys.Ecs.DeferredRef.Row.get -> int
+Tralys.Ecs.DeferredRef.Row.init -> void
+Tralys.Ecs.DeferredRef.Type.get -> int
+Tralys.Ecs.DeferredRef.Type.init -> void
+Tralys.Ecs.DescriptorKind
+Tralys.Ecs.DescriptorKind.Component = 0 -> Tralys.Ecs.DescriptorKind
+Tralys.Ecs.DescriptorKind.Relation = 2 -> Tralys.Ecs.DescriptorKind
+Tralys.Ecs.DescriptorKind.Rows = 3 -> Tralys.Ecs.DescriptorKind
+Tralys.Ecs.DescriptorKind.Tag = 1 -> Tralys.Ecs.DescriptorKind
+Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.ChildOrderDiffers = 8 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.ComponentOnlyInLeft = 3 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.ComponentOnlyInRight = 4 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.EnabledDiffers = 6 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.EntityOnlyInLeft = 0 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.EntityOnlyInRight = 1 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.ParentDiffers = 7 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.PartitionDiffers = 2 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.RelationsDiffer = 9 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.RowsDiffer = 10 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DifferenceKind.ValueDiffers = 5 -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.DueEntities<TKey>
+Tralys.Ecs.DueEntities<TKey>.DueEntities() -> void
+Tralys.Ecs.DueEntities<TKey>.GetEnumerator() -> Tralys.Ecs.DueEnumerator<TKey>
+Tralys.Ecs.DueEnumerator<TKey>
+Tralys.Ecs.DueEnumerator<TKey>.Current.get -> Tralys.Ecs.Entity
+Tralys.Ecs.DueEnumerator<TKey>.Dispose() -> void
+Tralys.Ecs.DueEnumerator<TKey>.DueEnumerator() -> void
+Tralys.Ecs.DueEnumerator<TKey>.MoveNext() -> bool
+Tralys.Ecs.EnableableAttribute
+Tralys.Ecs.EnableableAttribute.EnableableAttribute() -> void
+Tralys.Ecs.Entity
+Tralys.Ecs.Entity.Bits.get -> ulong
+Tralys.Ecs.Entity.Entity() -> void
+Tralys.Ecs.Entity.Entity(uint index, uint generation) -> void
+Tralys.Ecs.Entity.Equals(Tralys.Ecs.Entity other) -> bool
+Tralys.Ecs.Entity.Generation.get -> uint
+Tralys.Ecs.Entity.Index.get -> uint
+Tralys.Ecs.Entity.IsDefault.get -> bool
+Tralys.Ecs.EntityBatch
+Tralys.Ecs.EntityBatch.Add<T>(string! file = "", int line = 0) -> void
+Tralys.Ecs.EntityBatch.Dispose() -> void
+Tralys.Ecs.EntityBatch.EntityBatch() -> void
+Tralys.Ecs.EntityBatch.Remove<T>(string! file = "", int line = 0) -> bool
+Tralys.Ecs.EntityBatch.Set<T>(in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.EntityList
+Tralys.Ecs.EntityList.Contains(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.EntityList.CopyTo(System.Span<Tralys.Ecs.Entity> destination) -> void
+Tralys.Ecs.EntityList.Count.get -> int
+Tralys.Ecs.EntityList.EntityList() -> void
+Tralys.Ecs.EntityList.Enumerator
+Tralys.Ecs.EntityList.Enumerator.Current.get -> Tralys.Ecs.Entity
+Tralys.Ecs.EntityList.Enumerator.Enumerator() -> void
+Tralys.Ecs.EntityList.Enumerator.MoveNext() -> bool
+Tralys.Ecs.EntityList.GetEnumerator() -> Tralys.Ecs.EntityList.Enumerator
+Tralys.Ecs.EntityList.IsEmpty.get -> bool
+Tralys.Ecs.EntityList.ToArray() -> Tralys.Ecs.Entity[]!
+Tralys.Ecs.EntityList.this[int index].get -> Tralys.Ecs.Entity
+Tralys.Ecs.EntityWatch<T>
+Tralys.Ecs.EntityWatch<T>.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.EntityWatch<T>.EntityWatch() -> void
+Tralys.Ecs.EntityWatch<T>.EntityWatch(Tralys.Ecs.Entity entity) -> void
+Tralys.Ecs.EntityWatch<T>.Poll(Tralys.Ecs.World! world) -> Tralys.Ecs.WatchResult
+Tralys.Ecs.ExternalRef
+Tralys.Ecs.ExternalRef.Deconstruct(out ulong Value) -> void
+Tralys.Ecs.ExternalRef.Equals(Tralys.Ecs.ExternalRef other) -> bool
+Tralys.Ecs.ExternalRef.ExternalRef() -> void
+Tralys.Ecs.ExternalRef.ExternalRef(ulong Value) -> void
+Tralys.Ecs.ExternalRef.Value.get -> ulong
+Tralys.Ecs.ExternalRef.Value.init -> void
+Tralys.Ecs.ExtractResult
+Tralys.Ecs.ExtractResult.Conflict.get -> Tralys.Ecs.IndexConflictException?
+Tralys.Ecs.ExtractResult.ExtractResult() -> void
+Tralys.Ecs.ExtractResult.Image.get -> Tralys.Ecs.CaptureImage!
+Tralys.Ecs.FieldDescriptor
+Tralys.Ecs.FieldDescriptor.<Clone>$() -> Tralys.Ecs.FieldDescriptor!
+Tralys.Ecs.FieldDescriptor.Capture.get -> Tralys.Ecs.CapturePolicy
+Tralys.Ecs.FieldDescriptor.Capture.init -> void
+Tralys.Ecs.FieldDescriptor.Deconstruct(out string! Name, out int Offset, out int Size, out string! TypeName, out Tralys.Ecs.CapturePolicy Capture, out Tralys.Ecs.PassthroughUse![]! Passthrough) -> void
+Tralys.Ecs.FieldDescriptor.Equals(Tralys.Ecs.FieldDescriptor? other) -> bool
+Tralys.Ecs.FieldDescriptor.FieldDescriptor(string! Name, int Offset, int Size, string! TypeName, Tralys.Ecs.CapturePolicy Capture, Tralys.Ecs.PassthroughUse![]! Passthrough) -> void
+Tralys.Ecs.FieldDescriptor.Name.get -> string!
+Tralys.Ecs.FieldDescriptor.Name.init -> void
+Tralys.Ecs.FieldDescriptor.Offset.get -> int
+Tralys.Ecs.FieldDescriptor.Offset.init -> void
+Tralys.Ecs.FieldDescriptor.Passthrough.get -> Tralys.Ecs.PassthroughUse![]!
+Tralys.Ecs.FieldDescriptor.Passthrough.init -> void
+Tralys.Ecs.FieldDescriptor.Size.get -> int
+Tralys.Ecs.FieldDescriptor.Size.init -> void
+Tralys.Ecs.FieldDescriptor.TypeName.get -> string!
+Tralys.Ecs.FieldDescriptor.TypeName.init -> void
+Tralys.Ecs.Generated.BufferOps
+Tralys.Ecs.Generated.BufferOps.BufferOps() -> void
+Tralys.Ecs.Generated.BundleShape
+Tralys.Ecs.Generated.BundleShape.Add<T>() -> void
+Tralys.Ecs.Generated.BundleShape.BundleShape() -> void
+Tralys.Ecs.Generated.BundleWriter
+Tralys.Ecs.Generated.BundleWriter.BundleWriter() -> void
+Tralys.Ecs.Generated.BundleWriter.Write<T>(in T value) -> void
+Tralys.Ecs.Generated.ComponentInfo
+Tralys.Ecs.Generated.ComponentInfo.Aliases.get -> string![]!
+Tralys.Ecs.Generated.ComponentInfo.Aliases.init -> void
+Tralys.Ecs.Generated.ComponentInfo.BufferHandleOffsets.get -> int[]!
+Tralys.Ecs.Generated.ComponentInfo.BufferHandleOffsets.init -> void
+Tralys.Ecs.Generated.ComponentInfo.BufferOps.get -> Tralys.Ecs.Generated.BufferOps[]!
+Tralys.Ecs.Generated.ComponentInfo.BufferOps.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Categories.get -> ulong
+Tralys.Ecs.Generated.ComponentInfo.Categories.init -> void
+Tralys.Ecs.Generated.ComponentInfo.ComponentInfo() -> void
+Tralys.Ecs.Generated.ComponentInfo.EntityRefOffsets.get -> int[]!
+Tralys.Ecs.Generated.ComponentInfo.EntityRefOffsets.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Fields.get -> Tralys.Ecs.FieldDescriptor![]!
+Tralys.Ecs.Generated.ComponentInfo.Fields.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Indexes.get -> Tralys.Ecs.IndexDeclaration![]!
+Tralys.Ecs.Generated.ComponentInfo.Indexes.init -> void
+Tralys.Ecs.Generated.ComponentInfo.KeyField.get -> string?
+Tralys.Ecs.Generated.ComponentInfo.KeyField.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Kind.get -> Tralys.Ecs.DescriptorKind
+Tralys.Ecs.Generated.ComponentInfo.Kind.init -> void
+Tralys.Ecs.Generated.ComponentInfo.LayoutHash.get -> ulong
+Tralys.Ecs.Generated.ComponentInfo.LayoutHash.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Name.get -> string!
+Tralys.Ecs.Generated.ComponentInfo.Name.init -> void
+Tralys.Ecs.Generated.ComponentInfo.OnTargetDestroyed.get -> Tralys.Ecs.TargetPolicy
+Tralys.Ecs.Generated.ComponentInfo.OnTargetDestroyed.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Passthrough.get -> Tralys.Ecs.PassthroughUse![]!
+Tralys.Ecs.Generated.ComponentInfo.Passthrough.init -> void
+Tralys.Ecs.Generated.ComponentInfo.RelationTraits.get -> Tralys.Ecs.RelationTraits
+Tralys.Ecs.Generated.ComponentInfo.RelationTraits.init -> void
+Tralys.Ecs.Generated.ComponentInfo.RequiresNames.get -> string![]!
+Tralys.Ecs.Generated.ComponentInfo.RequiresNames.init -> void
+Tralys.Ecs.Generated.ComponentInfo.RowFactory.get -> Tralys.Ecs.Generated.RowStoreFactory
+Tralys.Ecs.Generated.ComponentInfo.RowFactory.init -> void
+Tralys.Ecs.Generated.ComponentInfo.SchemaVersion.get -> int
+Tralys.Ecs.Generated.ComponentInfo.SchemaVersion.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Storage.get -> Tralys.Ecs.StorageKind
+Tralys.Ecs.Generated.ComponentInfo.Storage.init -> void
+Tralys.Ecs.Generated.ComponentInfo.Traits.get -> Tralys.Ecs.ComponentTraits
+Tralys.Ecs.Generated.ComponentInfo.Traits.init -> void
+Tralys.Ecs.Generated.ComponentModuleManifestAttribute
+Tralys.Ecs.Generated.ComponentModuleManifestAttribute.ComponentModuleManifestAttribute(string![]! names) -> void
+Tralys.Ecs.Generated.ComponentModuleManifestAttribute.Names.get -> string![]!
+Tralys.Ecs.Generated.EffectAttribute
+Tralys.Ecs.Generated.EffectAttribute.EffectAttribute(Tralys.Ecs.Generated.Effects effects) -> void
+Tralys.Ecs.Generated.EffectAttribute.Effects.get -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.Borrows = 64 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.MovesRows = 8 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.Mutates = 16 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.None = 0 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.OwnerThread = 128 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.Settled = 32 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.Effects.Structural = 4 -> Tralys.Ecs.Generated.Effects
+Tralys.Ecs.Generated.IIndexKey<TComponent, TKey>
+Tralys.Ecs.Generated.IIndexKey<TComponent, TKey>.TryOf(in TComponent value, Tralys.Ecs.Entity parent, out TKey key) -> bool
+Tralys.Ecs.Generated.IOwnedBuffer
+Tralys.Ecs.Generated.IOwnedBuffer.Allocate(Tralys.Ecs.World! world, System.ReadOnlySpan<byte> contents, ref byte handle) -> void
+Tralys.Ecs.Generated.IOwnedBuffer.Copy(Tralys.Ecs.World! world, ref byte handle) -> byte[]?
+Tralys.Ecs.Generated.IOwnedBuffer.ElementSize.get -> int
+Tralys.Ecs.Generated.IOwnedBuffer.Free(Tralys.Ecs.World! world, ref byte handle) -> void
+Tralys.Ecs.Generated.IndexFactory
+Tralys.Ecs.Generated.IndexFactory.IndexFactory() -> void
+Tralys.Ecs.Generated.MustDisposeAttribute
+Tralys.Ecs.Generated.MustDisposeAttribute.Consequence.get -> string!
+Tralys.Ecs.Generated.MustDisposeAttribute.MustDisposeAttribute(string! consequence) -> void
+Tralys.Ecs.Generated.NullableLayout<T>
+Tralys.Ecs.Generated.NullableLayout<T>.HasValue -> bool
+Tralys.Ecs.Generated.NullableLayout<T>.NullableLayout() -> void
+Tralys.Ecs.Generated.NullableLayout<T>.Value -> T
+Tralys.Ecs.Generated.Plumbing
+Tralys.Ecs.Generated.RowStoreFactory
+Tralys.Ecs.Generated.RowStoreFactory.RowStoreFactory() -> void
+Tralys.Ecs.Generated.UpCache<T>
+Tralys.Ecs.Generated.UpCache<T>.Find(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Up<T>
+Tralys.Ecs.Generated.UpCache<T>.UpCache() -> void
+Tralys.Ecs.Generated.UpCache<T>.UpCache(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.HierarchyEvent
+Tralys.Ecs.HierarchyEvent.ChildAdded = 0 -> Tralys.Ecs.HierarchyEvent
+Tralys.Ecs.HierarchyEvent.ChildMoved = 2 -> Tralys.Ecs.HierarchyEvent
+Tralys.Ecs.HierarchyEvent.ChildRemoved = 1 -> Tralys.Ecs.HierarchyEvent
+Tralys.Ecs.Hop
+Tralys.Ecs.Hop.Hop() -> void
+Tralys.Ecs.IAddObserver<T>
+Tralys.Ecs.IAddObserver<T>.OnAdd(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity entity, in T value) -> void
+Tralys.Ecs.IBundle
+Tralys.Ecs.IBundle.Describe(ref Tralys.Ecs.Generated.BundleShape shape) -> void
+Tralys.Ecs.IBundle.Write(ref Tralys.Ecs.Generated.BundleWriter writer) -> void
+Tralys.Ecs.ICaptureBoundary
+Tralys.Ecs.ICaptureBoundary.Include(Tralys.Ecs.World! world, Tralys.Ecs.Entity candidate) -> bool
+Tralys.Ecs.IChunkExecutor
+Tralys.Ecs.IChunkExecutor.Run<TJob>(ref TJob job, int itemCount) -> void
+Tralys.Ecs.IChunkExecutor.WorkerCount.get -> int
+Tralys.Ecs.IChunkKernel
+Tralys.Ecs.IChunkKernel.Execute(ref Tralys.Ecs.ChunkView chunk) -> void
+Tralys.Ecs.IComponent
+Tralys.Ecs.IComponentVisitor
+Tralys.Ecs.IComponentVisitor.Visit<T>(Tralys.Ecs.ComponentDescriptor! descriptor, in T value) -> void
+Tralys.Ecs.IDeclared
+Tralys.Ecs.IDestroyObserver
+Tralys.Ecs.IDestroyObserver.OnDestroy(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity entity) -> void
+Tralys.Ecs.IEnableable
+Tralys.Ecs.IEntityAction
+Tralys.Ecs.IEntityAction.Act(Tralys.Ecs.Entity entity) -> void
+Tralys.Ecs.IEntityView<TSelf>
+Tralys.Ecs.IEntityView<TSelf>.Entity.get -> Tralys.Ecs.WorldEntity
+Tralys.Ecs.IEntityView<TSelf>.TryFrom(Tralys.Ecs.WorldEntity entity, out TSelf view) -> bool
+Tralys.Ecs.IExternalRefResolver
+Tralys.Ecs.IExternalRefResolver.TryResolve(in Tralys.Ecs.ExternalRef reference, out Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.IExternalRefTranslator
+Tralys.Ecs.IExternalRefTranslator.Translate(Tralys.Ecs.World! world, Tralys.Ecs.Entity outside) -> Tralys.Ecs.ExternalRef
+Tralys.Ecs.IFaultSink
+Tralys.Ecs.IFaultSink.OnEntityFault(Tralys.Ecs.SystemId system, Tralys.Ecs.Entity entity, System.Exception! error) -> void
+Tralys.Ecs.IFaultSink.OnPlaybackFault(string! point, System.Exception! error) -> void
+Tralys.Ecs.IFaultSink.OnSetFault(System.Type! set, System.Exception! error) -> void
+Tralys.Ecs.IFaultSink.OnSystemFault(Tralys.Ecs.SystemDescriptor! system, System.Exception! error) -> void
+Tralys.Ecs.IFieldRebaser
+Tralys.Ecs.IFieldRebaser.Rebase(Tralys.Ecs.FieldDescriptor! field, System.Span<byte> value) -> void
+Tralys.Ecs.IHierarchyObserver
+Tralys.Ecs.IHierarchyObserver.OnHierarchy(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity child, Tralys.Ecs.Entity parent, Tralys.Ecs.HierarchyEvent kind) -> void
+Tralys.Ecs.IHop
+Tralys.Ecs.IHop.Route(Tralys.Ecs.World! world, Tralys.Ecs.Entity holder, System.Collections.Generic.List<Tralys.Ecs.Entity>! into) -> void
+Tralys.Ecs.ILifecycleObserver
+Tralys.Ecs.ILifecycleObserver.OnLifecycle(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity entity, Tralys.Ecs.LogKind kind) -> void
+Tralys.Ecs.IMutableComponent
+Tralys.Ecs.IPartitionJob
+Tralys.Ecs.IPartitionJob.Execute(int item, int worker) -> void
+Tralys.Ecs.IReducingKernel<TAccumulator>
+Tralys.Ecs.IReducingKernel<TAccumulator>.Execute(ref Tralys.Ecs.ChunkView chunk, ref TAccumulator partial) -> void
+Tralys.Ecs.IReduction<TSelf>
+Tralys.Ecs.IReduction<TSelf>.Combine(in TSelf left, in TSelf right) -> TSelf
+Tralys.Ecs.IReduction<TSelf>.Identity.get -> TSelf
+Tralys.Ecs.IReferenceFaultSink
+Tralys.Ecs.IReferenceFaultSink.OnDanglingReference(in Tralys.Ecs.DanglingReference reference) -> void
+Tralys.Ecs.IRelation
+Tralys.Ecs.IRelationObserver<R>
+Tralys.Ecs.IRelationObserver<R>.OnRelated(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, in R payload) -> void
+Tralys.Ecs.IRelationObserver<R>.OnRelationChanged(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, in R oldPayload, in R newPayload) -> void
+Tralys.Ecs.IRelationObserver<R>.OnUnrelated(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, in R payload) -> void
+Tralys.Ecs.IRemoveObserver<T>
+Tralys.Ecs.IRemoveObserver<T>.OnRemove(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity entity, in T oldValue) -> void
+Tralys.Ecs.IReplaceObserver<T>
+Tralys.Ecs.IReplaceObserver<T>.OnReplace(in Tralys.Ecs.ObserverContext context, Tralys.Ecs.Entity entity, in T oldValue, in T newValue) -> void
+Tralys.Ecs.IReplaceOnly
+Tralys.Ecs.IRow
+Tralys.Ecs.IRow<TKey>
+Tralys.Ecs.IRow<TKey>.RowKey.get -> TKey
+Tralys.Ecs.IRow<TKey>.RowKey.set -> void
+Tralys.Ecs.ISingleton
+Tralys.Ecs.ITag
+Tralys.Ecs.ITracked
+Tralys.Ecs.IWatchScope<TBits>
+Tralys.Ecs.IWatchScope<TBits>.Everything(Tralys.Ecs.World! world, Tralys.Ecs.ChangeSet<TBits>! into) -> void
+Tralys.Ecs.IWatchScope<TBits>.Whole(Tralys.Ecs.World! world, Tralys.Ecs.Entity entity) -> TBits
+Tralys.Ecs.IWorldAttachment
+Tralys.Ecs.IWorldAttachment.OnWorldCleared(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.IWorldAttachment.OnWorldRestored(Tralys.Ecs.World! world, in Tralys.Ecs.RestoreInfo info) -> void
+Tralys.Ecs.InSetAttribute<TSet>
+Tralys.Ecs.InSetAttribute<TSet>.InSetAttribute() -> void
+Tralys.Ecs.IncludeDetachedAttribute
+Tralys.Ecs.IncludeDetachedAttribute.IncludeDetachedAttribute() -> void
+Tralys.Ecs.IncludePendingDestroyAttribute
+Tralys.Ecs.IncludePendingDestroyAttribute.IncludePendingDestroyAttribute() -> void
+Tralys.Ecs.IndexAttribute
+Tralys.Ecs.IndexAttribute.Fields.get -> string![]!
+Tralys.Ecs.IndexAttribute.IndexAttribute(string![]! fields) -> void
+Tralys.Ecs.IndexAttribute.KeyFrom.get -> string?
+Tralys.Ecs.IndexAttribute.KeyFrom.set -> void
+Tralys.Ecs.IndexAttribute.Name.get -> string?
+Tralys.Ecs.IndexAttribute.Name.set -> void
+Tralys.Ecs.IndexConflict
+Tralys.Ecs.IndexConflict.Deconstruct(out string! Index, out object! Key, out Tralys.Ecs.Entity Holder, out Tralys.Ecs.Entity Incoming) -> void
+Tralys.Ecs.IndexConflict.Equals(Tralys.Ecs.IndexConflict other) -> bool
+Tralys.Ecs.IndexConflict.Holder.get -> Tralys.Ecs.Entity
+Tralys.Ecs.IndexConflict.Holder.init -> void
+Tralys.Ecs.IndexConflict.Incoming.get -> Tralys.Ecs.Entity
+Tralys.Ecs.IndexConflict.Incoming.init -> void
+Tralys.Ecs.IndexConflict.Index.get -> string!
+Tralys.Ecs.IndexConflict.Index.init -> void
+Tralys.Ecs.IndexConflict.IndexConflict() -> void
+Tralys.Ecs.IndexConflict.IndexConflict(string! Index, object! Key, Tralys.Ecs.Entity Holder, Tralys.Ecs.Entity Incoming) -> void
+Tralys.Ecs.IndexConflict.Key.get -> object!
+Tralys.Ecs.IndexConflict.Key.init -> void
+Tralys.Ecs.IndexConflictException
+Tralys.Ecs.IndexConflictException.Conflicts.get -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.IndexConflict>!
+Tralys.Ecs.IndexConflictException.Holder.get -> Tralys.Ecs.Entity
+Tralys.Ecs.IndexConflictException.Incoming.get -> Tralys.Ecs.Entity
+Tralys.Ecs.IndexConflictException.Index.get -> string!
+Tralys.Ecs.IndexConflictException.IndexConflictException(string! index, object! key, Tralys.Ecs.Entity holder, Tralys.Ecs.Entity incoming) -> void
+Tralys.Ecs.IndexConflictException.Key.get -> object!
+Tralys.Ecs.IndexDeclaration
+Tralys.Ecs.IndexDeclaration.Fields.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Tralys.Ecs.IndexDeclaration.IndexDeclaration(Tralys.Ecs.IndexKind kind, string! name, string![]! fields, string? keyFrom, Tralys.Ecs.ConflictPolicy onConflict, bool perParent, Tralys.Ecs.Generated.IndexFactory factory) -> void
+Tralys.Ecs.IndexDeclaration.KeyFrom.get -> string?
+Tralys.Ecs.IndexDeclaration.Kind.get -> Tralys.Ecs.IndexKind
+Tralys.Ecs.IndexDeclaration.Name.get -> string!
+Tralys.Ecs.IndexDeclaration.OnConflict.get -> Tralys.Ecs.ConflictPolicy
+Tralys.Ecs.IndexDeclaration.PerParent.get -> bool
+Tralys.Ecs.IndexKind
+Tralys.Ecs.IndexKind.Multi = 1 -> Tralys.Ecs.IndexKind
+Tralys.Ecs.IndexKind.Ordered = 2 -> Tralys.Ecs.IndexKind
+Tralys.Ecs.IndexKind.Unique = 0 -> Tralys.Ecs.IndexKind
+Tralys.Ecs.IndexLookup<T>
+Tralys.Ecs.IndexLookup<T>.IndexLookup() -> void
+Tralys.Ecs.IndexLookup<T>.IndexLookup(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.InlineExecutor
+Tralys.Ecs.InlineExecutor.InlineExecutor() -> void
+Tralys.Ecs.InlineExecutor.Run<TJob>(ref TJob job, int itemCount) -> void
+Tralys.Ecs.InlineExecutor.WorkerCount.get -> int
+Tralys.Ecs.LifecycleReason
+Tralys.Ecs.LifecycleReason.Code.get -> ushort
+Tralys.Ecs.LifecycleReason.Code.init -> void
+Tralys.Ecs.LifecycleReason.Deconstruct(out ushort Code) -> void
+Tralys.Ecs.LifecycleReason.Equals(Tralys.Ecs.LifecycleReason other) -> bool
+Tralys.Ecs.LifecycleReason.LifecycleReason() -> void
+Tralys.Ecs.LifecycleReason.LifecycleReason(ushort Code) -> void
+Tralys.Ecs.LifecycleState
+Tralys.Ecs.LifecycleState.Alive = 2 -> Tralys.Ecs.LifecycleState
+Tralys.Ecs.LifecycleState.Dead = 0 -> Tralys.Ecs.LifecycleState
+Tralys.Ecs.LifecycleState.PendingDestroy = 3 -> Tralys.Ecs.LifecycleState
+Tralys.Ecs.LifecycleState.Reserved = 1 -> Tralys.Ecs.LifecycleState
+Tralys.Ecs.LogEntry
+Tralys.Ecs.LogEntry.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.LogEntry.Equals(Tralys.Ecs.LogEntry other) -> bool
+Tralys.Ecs.LogEntry.Is<T>() -> bool
+Tralys.Ecs.LogEntry.Kind.get -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogEntry.LogEntry() -> void
+Tralys.Ecs.LogEntry.Other.get -> Tralys.Ecs.Entity
+Tralys.Ecs.LogEntry.Reason.get -> Tralys.Ecs.LifecycleReason
+Tralys.Ecs.LogEntry.TypeIndex.get -> int
+Tralys.Ecs.LogEntry.Version.get -> ulong
+Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Added = 2 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Created = 0 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.DestroyCancelled = 17 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Destroyed = 1 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Detached = 7 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Disabled = 6 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Enabled = 5 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Extracted = 9 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Reattached = 8 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Related = 10 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.RelationChanged = 12 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Removed = 4 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Reparented = 13 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Replaced = 3 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Restored = 16 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.RowAdded = 14 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.RowRemoved = 15 -> Tralys.Ecs.LogKind
+Tralys.Ecs.LogKind.Unrelated = 11 -> Tralys.Ecs.LogKind
+Tralys.Ecs.Lookup<T>
+Tralys.Ecs.Lookup<T>.Find(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Optional<T>
+Tralys.Ecs.Lookup<T>.Get(Tralys.Ecs.Entity entity) -> T
+Tralys.Ecs.Lookup<T>.Has(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.Lookup<T>.Lookup() -> void
+Tralys.Ecs.Lookup<T>.Lookup(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.Lookup<T>.TryGet(Tralys.Ecs.Entity entity, out T value) -> bool
+Tralys.Ecs.MetadataPassthroughAttribute
+Tralys.Ecs.MetadataPassthroughAttribute.MetadataPassthroughAttribute() -> void
+Tralys.Ecs.MultiIndex<TKey>
+Tralys.Ecs.MultiIndex<TKey>.Count(scoped in TKey key) -> int
+Tralys.Ecs.MultiIndex<TKey>.Get(scoped in TKey key) -> Tralys.Ecs.EntityList
+Tralys.Ecs.MultiIndex<TKey>.IncludeDetached() -> Tralys.Ecs.MultiIndex<TKey>
+Tralys.Ecs.MultiIndex<TKey>.MultiIndex() -> void
+Tralys.Ecs.MultiIndexAttribute
+Tralys.Ecs.MultiIndexAttribute.MultiIndexAttribute(params string![]! fields) -> void
+Tralys.Ecs.MultiIndexAttribute.PerParent.get -> bool
+Tralys.Ecs.MultiIndexAttribute.PerParent.set -> void
+Tralys.Ecs.ObserverContext
+Tralys.Ecs.ObserverContext.ObserverContext() -> void
+Tralys.Ecs.ObserverContext.Reason.get -> Tralys.Ecs.LifecycleReason
+Tralys.Ecs.ObserverContext.World.get -> Tralys.Ecs.World!
+Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverId.Deconstruct(out int Value) -> void
+Tralys.Ecs.ObserverId.Equals(Tralys.Ecs.ObserverId other) -> bool
+Tralys.Ecs.ObserverId.ObserverId() -> void
+Tralys.Ecs.ObserverId.ObserverId(int Value) -> void
+Tralys.Ecs.ObserverId.Value.get -> int
+Tralys.Ecs.ObserverId.Value.init -> void
+Tralys.Ecs.ObserverRegistry
+Tralys.Ecs.ObserverRegistry.OnAdd<T>(Tralys.Ecs.IAddObserver<T>! observer, bool replayExisting = false) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnDestroy(Tralys.Ecs.IDestroyObserver! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnHierarchy(Tralys.Ecs.IHierarchyObserver! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnLifecycle(Tralys.Ecs.ILifecycleObserver! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnRelation<R>(Tralys.Ecs.IRelationObserver<R>! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnRemove<T>(Tralys.Ecs.IRemoveObserver<T>! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnReplace<T>(Tralys.Ecs.IReplaceObserver<T>! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnRowAdd<T>(Tralys.Ecs.IAddObserver<T>! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.OnRowRemove<T>(Tralys.Ecs.IRemoveObserver<T>! observer) -> Tralys.Ecs.ObserverId
+Tralys.Ecs.ObserverRegistry.Remove(Tralys.Ecs.ObserverId id) -> void
+Tralys.Ecs.Optional<T>
+Tralys.Ecs.Optional<T>.GetValueOrDefault() -> T
+Tralys.Ecs.Optional<T>.HasValue.get -> bool
+Tralys.Ecs.Optional<T>.Optional() -> void
+Tralys.Ecs.Optional<T>.Value.get -> T
+Tralys.Ecs.OptionalRef<T>
+Tralys.Ecs.OptionalRef<T>.HasValue.get -> bool
+Tralys.Ecs.OptionalRef<T>.OptionalRef() -> void
+Tralys.Ecs.OptionalRef<T>.Value.get -> T
+Tralys.Ecs.OrderedIndex<TKey>
+Tralys.Ecs.OrderedIndex<TKey>.Count.get -> int
+Tralys.Ecs.OrderedIndex<TKey>.Due(scoped in TKey upToInclusive) -> Tralys.Ecs.DueEntities<TKey>
+Tralys.Ecs.OrderedIndex<TKey>.IncludeDetached() -> Tralys.Ecs.OrderedIndex<TKey>
+Tralys.Ecs.OrderedIndex<TKey>.OrderedIndex() -> void
+Tralys.Ecs.OrderedIndex<TKey>.TryPeek(out TKey key, out Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.OrderedIndexAttribute
+Tralys.Ecs.OrderedIndexAttribute.OrderedIndexAttribute(params string![]! fields) -> void
+Tralys.Ecs.Parent<T>
+Tralys.Ecs.Parent<T>.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.Parent<T>.HasValue.get -> bool
+Tralys.Ecs.Parent<T>.Parent() -> void
+Tralys.Ecs.Parent<T>.Value.get -> T
+Tralys.Ecs.PartAttribute<T>
+Tralys.Ecs.PartAttribute<T>.Optional.get -> bool
+Tralys.Ecs.PartAttribute<T>.Optional.set -> void
+Tralys.Ecs.PartAttribute<T>.PartAttribute() -> void
+Tralys.Ecs.PartAttribute<T>.ReadOnly.get -> bool
+Tralys.Ecs.PartAttribute<T>.ReadOnly.set -> void
+Tralys.Ecs.PassthroughUse
+Tralys.Ecs.PassthroughUse.<Clone>$() -> Tralys.Ecs.PassthroughUse!
+Tralys.Ecs.PassthroughUse.ArgumentNames.get -> string?[]!
+Tralys.Ecs.PassthroughUse.ArgumentNames.init -> void
+Tralys.Ecs.PassthroughUse.Arguments.get -> object?[]!
+Tralys.Ecs.PassthroughUse.Arguments.init -> void
+Tralys.Ecs.PassthroughUse.Attribute.get -> string!
+Tralys.Ecs.PassthroughUse.Attribute.init -> void
+Tralys.Ecs.PassthroughUse.Deconstruct(out string! Attribute, out object?[]! Arguments, out string?[]! ArgumentNames) -> void
+Tralys.Ecs.PassthroughUse.Equals(Tralys.Ecs.PassthroughUse? other) -> bool
+Tralys.Ecs.PassthroughUse.PassthroughUse(string! Attribute, object?[]! Arguments, string?[]! ArgumentNames) -> void
+Tralys.Ecs.PlaybackStats
+Tralys.Ecs.PlaybackStats.Applied.get -> int
+Tralys.Ecs.PlaybackStats.Applied.init -> void
+Tralys.Ecs.PlaybackStats.Deconstruct(out int Applied, out int Folded, out int StaleSkipped, out int ObserverRounds, out int Finalized) -> void
+Tralys.Ecs.PlaybackStats.Equals(Tralys.Ecs.PlaybackStats other) -> bool
+Tralys.Ecs.PlaybackStats.Finalized.get -> int
+Tralys.Ecs.PlaybackStats.Finalized.init -> void
+Tralys.Ecs.PlaybackStats.Folded.get -> int
+Tralys.Ecs.PlaybackStats.Folded.init -> void
+Tralys.Ecs.PlaybackStats.ObserverRounds.get -> int
+Tralys.Ecs.PlaybackStats.ObserverRounds.init -> void
+Tralys.Ecs.PlaybackStats.PlaybackStats() -> void
+Tralys.Ecs.PlaybackStats.PlaybackStats(int Applied, int Folded, int StaleSkipped, int ObserverRounds, int Finalized) -> void
+Tralys.Ecs.PlaybackStats.StaleSkipped.get -> int
+Tralys.Ecs.PlaybackStats.StaleSkipped.init -> void
+Tralys.Ecs.PropagateChangesAttribute
+Tralys.Ecs.PropagateChangesAttribute.PropagateChangesAttribute() -> void
+Tralys.Ecs.PropagateChangesAttribute.ToAncestors.get -> bool
+Tralys.Ecs.PropagateChangesAttribute.ToAncestors.set -> void
+Tralys.Ecs.PropagateChangesAttribute.ToRelationSources.get -> bool
+Tralys.Ecs.PropagateChangesAttribute.ToRelationSources.set -> void
+Tralys.Ecs.QueryAttribute
+Tralys.Ecs.QueryAttribute.DepthOrdered.get -> bool
+Tralys.Ecs.QueryAttribute.DepthOrdered.set -> void
+Tralys.Ecs.QueryAttribute.Parallel.get -> bool
+Tralys.Ecs.QueryAttribute.Parallel.set -> void
+Tralys.Ecs.QueryAttribute.QueryAttribute() -> void
+Tralys.Ecs.QueryDesc
+Tralys.Ecs.QueryDesc.Id.get -> int
+Tralys.Ecs.QueryDesc.TermCount.get -> int
+Tralys.Ecs.QueryDescBuilder
+Tralys.Ecs.QueryDescBuilder.AnyOf<T>(int group) -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.Build() -> Tralys.Ecs.QueryDesc!
+Tralys.Ecs.QueryDescBuilder.Changed<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.IncludeDetached() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.IncludePendingDestroy() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.Optional<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.OptionalWrite<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.Read<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.With<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.Without<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryDescBuilder.Write<T>() -> Tralys.Ecs.QueryDescBuilder!
+Tralys.Ecs.QueryInfo
+Tralys.Ecs.QueryInfo.Desc.get -> Tralys.Ecs.QueryDesc!
+Tralys.Ecs.QueryInfo.MatchedArchetypes.get -> int
+Tralys.Ecs.QueryInfo.MatchedEntities.get -> int
+Tralys.Ecs.QueryInfo.QueryInfo() -> void
+Tralys.Ecs.RefLookup<T>
+Tralys.Ecs.RefLookup<T>.Find(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Optional<T>
+Tralys.Ecs.RefLookup<T>.Get(Tralys.Ecs.Entity entity) -> T
+Tralys.Ecs.RefLookup<T>.Has(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.RefLookup<T>.RefLookup() -> void
+Tralys.Ecs.RefLookup<T>.RefLookup(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.RefLookup<T>.Replace(Tralys.Ecs.Entity entity, in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.RefLookup<T>.TryGet(Tralys.Ecs.Entity entity, out T value) -> bool
+Tralys.Ecs.RefLookupExtensions
+Tralys.Ecs.ReferenceHolder
+Tralys.Ecs.ReferenceHolder.Component = 0 -> Tralys.Ecs.ReferenceHolder
+Tralys.Ecs.ReferenceHolder.RelationPayload = 1 -> Tralys.Ecs.ReferenceHolder
+Tralys.Ecs.ReferenceHolder.RelationTarget = 3 -> Tralys.Ecs.ReferenceHolder
+Tralys.Ecs.ReferenceHolder.Row = 2 -> Tralys.Ecs.ReferenceHolder
+Tralys.Ecs.Registry
+Tralys.Ecs.Registry.Contains(int index) -> bool
+Tralys.Ecs.Registry.Descriptors.get -> System.ReadOnlySpan<Tralys.Ecs.ComponentDescriptor!>
+Tralys.Ecs.Registry.FindByName(string! name) -> Tralys.Ecs.ComponentDescriptor?
+Tralys.Ecs.Registry.Get<T>() -> Tralys.Ecs.ComponentDescriptor!
+Tralys.Ecs.Registry.this[int index].get -> Tralys.Ecs.ComponentDescriptor!
+Tralys.Ecs.RelationAttribute
+Tralys.Ecs.RelationAttribute.OnTargetDestroyed.get -> Tralys.Ecs.TargetPolicy
+Tralys.Ecs.RelationAttribute.OnTargetDestroyed.set -> void
+Tralys.Ecs.RelationAttribute.RelationAttribute() -> void
+Tralys.Ecs.RelationAttribute.SchemaVersion.get -> int
+Tralys.Ecs.RelationAttribute.SchemaVersion.set -> void
+Tralys.Ecs.RelationAttribute.Traits.get -> Tralys.Ecs.RelationTraits
+Tralys.Ecs.RelationAttribute.Traits.set -> void
+Tralys.Ecs.RelationTargets<R>
+Tralys.Ecs.RelationTargets<R>.Count.get -> int
+Tralys.Ecs.RelationTargets<R>.Enumerator
+Tralys.Ecs.RelationTargets<R>.Enumerator.Current.get -> Tralys.Ecs.Entity
+Tralys.Ecs.RelationTargets<R>.Enumerator.Enumerator() -> void
+Tralys.Ecs.RelationTargets<R>.Enumerator.MoveNext() -> bool
+Tralys.Ecs.RelationTargets<R>.GetEnumerator() -> Tralys.Ecs.RelationTargets<R>.Enumerator
+Tralys.Ecs.RelationTargets<R>.Payload(int index) -> R
+Tralys.Ecs.RelationTargets<R>.RelationTargets() -> void
+Tralys.Ecs.RelationTargets<R>.this[int index].get -> Tralys.Ecs.Entity
+Tralys.Ecs.RelationTraits
+Tralys.Ecs.RelationTraits.Exclusive = 1 -> Tralys.Ecs.RelationTraits
+Tralys.Ecs.RelationTraits.None = 0 -> Tralys.Ecs.RelationTraits
+Tralys.Ecs.RelationTraits.Symmetric = 2 -> Tralys.Ecs.RelationTraits
+Tralys.Ecs.ReplaceOnlyAttribute
+Tralys.Ecs.ReplaceOnlyAttribute.ReplaceOnlyAttribute() -> void
+Tralys.Ecs.RequiresAttribute<T>
+Tralys.Ecs.RequiresAttribute<T>.RequiresAttribute() -> void
+Tralys.Ecs.RestoreInfo
+Tralys.Ecs.RestoreInfo.Created.get -> System.ReadOnlySpan<Tralys.Ecs.Entity>
+Tralys.Ecs.RestoreInfo.Kind.get -> Tralys.Ecs.RestoreKind
+Tralys.Ecs.RestoreInfo.Reason.get -> Tralys.Ecs.LifecycleReason
+Tralys.Ecs.RestoreInfo.RestoreInfo() -> void
+Tralys.Ecs.RestoreKind
+Tralys.Ecs.RestoreKind.Reset = 0 -> Tralys.Ecs.RestoreKind
+Tralys.Ecs.RestoreKind.Subset = 1 -> Tralys.Ecs.RestoreKind
+Tralys.Ecs.RestoreOptions
+Tralys.Ecs.RestoreOptions.Deconstruct(out Tralys.Ecs.IExternalRefResolver? Resolver, out Tralys.Ecs.UnresolvedPolicy Unresolved, out Tralys.Ecs.LifecycleReason Reason, out Tralys.Ecs.IFieldRebaser? Rebaser) -> void
+Tralys.Ecs.RestoreOptions.Equals(Tralys.Ecs.RestoreOptions other) -> bool
+Tralys.Ecs.RestoreOptions.Reason.get -> Tralys.Ecs.LifecycleReason
+Tralys.Ecs.RestoreOptions.Reason.init -> void
+Tralys.Ecs.RestoreOptions.Rebaser.get -> Tralys.Ecs.IFieldRebaser?
+Tralys.Ecs.RestoreOptions.Rebaser.init -> void
+Tralys.Ecs.RestoreOptions.Resolver.get -> Tralys.Ecs.IExternalRefResolver?
+Tralys.Ecs.RestoreOptions.Resolver.init -> void
+Tralys.Ecs.RestoreOptions.RestoreOptions() -> void
+Tralys.Ecs.RestoreOptions.RestoreOptions(Tralys.Ecs.IExternalRefResolver? Resolver = null, Tralys.Ecs.UnresolvedPolicy Unresolved = Tralys.Ecs.UnresolvedPolicy.Null, Tralys.Ecs.LifecycleReason Reason = default(Tralys.Ecs.LifecycleReason), Tralys.Ecs.IFieldRebaser? Rebaser = null) -> void
+Tralys.Ecs.RestoreOptions.Unresolved.get -> Tralys.Ecs.UnresolvedPolicy
+Tralys.Ecs.RestoreOptions.Unresolved.init -> void
+Tralys.Ecs.RestoreResult
+Tralys.Ecs.RestoreResult.Conflict.get -> Tralys.Ecs.IndexConflictException?
+Tralys.Ecs.RestoreResult.Created.get -> System.ReadOnlySpan<Tralys.Ecs.Entity>
+Tralys.Ecs.RestoreResult.Deferred.get -> System.ReadOnlySpan<Tralys.Ecs.DeferredRef>
+Tralys.Ecs.RestoreResult.Map(Tralys.Ecs.Entity source) -> Tralys.Ecs.Entity
+Tralys.Ecs.RestoreResult.RestoreResult() -> void
+Tralys.Ecs.RestoreResult.Unresolved.get -> int
+Tralys.Ecs.RowEdit<TKey, TRow>
+Tralys.Ecs.RowEdit<TKey, TRow>.Dispose() -> void
+Tralys.Ecs.RowEdit<TKey, TRow>.RowEdit() -> void
+Tralys.Ecs.RowEdit<TKey, TRow>.Value.get -> TRow
+Tralys.Ecs.RowKeyAttribute
+Tralys.Ecs.RowKeyAttribute.RowKeyAttribute() -> void
+Tralys.Ecs.RowSet
+Tralys.Ecs.RowSet.Contains(int row) -> bool
+Tralys.Ecs.RowSet.Count.get -> int
+Tralys.Ecs.RowSet.Enumerator
+Tralys.Ecs.RowSet.Enumerator.Current.get -> int
+Tralys.Ecs.RowSet.Enumerator.Enumerator() -> void
+Tralys.Ecs.RowSet.Enumerator.Enumerator(ulong bits) -> void
+Tralys.Ecs.RowSet.Enumerator.MoveNext() -> bool
+Tralys.Ecs.RowSet.GetEnumerator() -> Tralys.Ecs.RowSet.Enumerator
+Tralys.Ecs.RowSet.RowSet() -> void
+Tralys.Ecs.RowSet.RowSet(ulong mask) -> void
+Tralys.Ecs.Rows<TKey, TRow>
+Tralys.Ecs.Rows<TKey, TRow>.Clear(string! file = "", int line = 0) -> void
+Tralys.Ecs.Rows<TKey, TRow>.Contains(in TKey key) -> bool
+Tralys.Ecs.Rows<TKey, TRow>.Count.get -> int
+Tralys.Ecs.Rows<TKey, TRow>.Edit(in TKey key, string! file = "", int line = 0) -> Tralys.Ecs.RowEdit<TKey, TRow>
+Tralys.Ecs.Rows<TKey, TRow>.EditOrAdd(in TKey key, out bool added, string! file = "", int line = 0) -> Tralys.Ecs.RowEdit<TKey, TRow>
+Tralys.Ecs.Rows<TKey, TRow>.Enumerator
+Tralys.Ecs.Rows<TKey, TRow>.Enumerator.Current.get -> TRow
+Tralys.Ecs.Rows<TKey, TRow>.Enumerator.Dispose() -> void
+Tralys.Ecs.Rows<TKey, TRow>.Enumerator.Enumerator() -> void
+Tralys.Ecs.Rows<TKey, TRow>.Enumerator.MoveNext() -> bool
+Tralys.Ecs.Rows<TKey, TRow>.Enumerator.RemoveCurrent(string! file = "", int line = 0) -> void
+Tralys.Ecs.Rows<TKey, TRow>.Find(in TKey key) -> Tralys.Ecs.Optional<TRow>
+Tralys.Ecs.Rows<TKey, TRow>.GetEnumerator() -> Tralys.Ecs.Rows<TKey, TRow>.Enumerator
+Tralys.Ecs.Rows<TKey, TRow>.Remove(in TKey key, string! file = "", int line = 0) -> bool
+Tralys.Ecs.Rows<TKey, TRow>.Rows() -> void
+Tralys.Ecs.Rows<TKey, TRow>.Set(in TRow row, string! file = "", int line = 0) -> void
+Tralys.Ecs.Rows<TKey, TRow>.TryGet(in TKey key, out TRow row) -> bool
+Tralys.Ecs.RowsAttribute
+Tralys.Ecs.RowsAttribute.PresenceMask.get -> bool
+Tralys.Ecs.RowsAttribute.PresenceMask.set -> void
+Tralys.Ecs.RowsAttribute.ReverseKeyIndex.get -> bool
+Tralys.Ecs.RowsAttribute.ReverseKeyIndex.set -> void
+Tralys.Ecs.RowsAttribute.RowsAttribute() -> void
+Tralys.Ecs.RowsAttribute.SchemaVersion.get -> int
+Tralys.Ecs.RowsAttribute.SchemaVersion.set -> void
+Tralys.Ecs.RunContext
+Tralys.Ecs.RunContext.Faults.get -> Tralys.Ecs.IFaultSink?
+Tralys.Ecs.RunContext.RunContext() -> void
+Tralys.Ecs.RunContext.RunContext(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.RunContext.System.get -> Tralys.Ecs.SystemId
+Tralys.Ecs.RunContext.Tick<TTick>() -> TTick
+Tralys.Ecs.RunContext.Version.get -> ulong
+Tralys.Ecs.RunContext.World.get -> Tralys.Ecs.World!
+Tralys.Ecs.ScratchBuffer<T>
+Tralys.Ecs.ScratchBuffer<T>.Dispose() -> void
+Tralys.Ecs.ScratchBuffer<T>.ScratchBuffer() -> void
+Tralys.Ecs.ScratchBuffer<T>.Span.get -> System.Span<T>
+Tralys.Ecs.SingletonAttribute
+Tralys.Ecs.SingletonAttribute.SingletonAttribute() -> void
+Tralys.Ecs.SourceWorldResolver
+Tralys.Ecs.SourceWorldResolver.SourceWorldResolver(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.SourceWorldResolver.TryResolve(in Tralys.Ecs.ExternalRef reference, out Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.SparseEdit<T>
+Tralys.Ecs.SparseEdit<T>.Dispose() -> void
+Tralys.Ecs.SparseEdit<T>.HasValue.get -> bool
+Tralys.Ecs.SparseEdit<T>.SparseEdit() -> void
+Tralys.Ecs.SparseEdit<T>.Value.get -> T
+Tralys.Ecs.SparseTerm<T>
+Tralys.Ecs.SparseTerm<T>.Edit(Tralys.Ecs.Entity entity) -> Tralys.Ecs.SparseEdit<T>
+Tralys.Ecs.SparseTerm<T>.Find(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Optional<T>
+Tralys.Ecs.SparseTerm<T>.SparseTerm() -> void
+Tralys.Ecs.SparseTerm<T>.Tracks.get -> bool
+Tralys.Ecs.StorageAttribute
+Tralys.Ecs.StorageAttribute.Kind.get -> Tralys.Ecs.StorageKind
+Tralys.Ecs.StorageAttribute.StorageAttribute(Tralys.Ecs.StorageKind kind) -> void
+Tralys.Ecs.StorageKind
+Tralys.Ecs.StorageKind.Archetype = 0 -> Tralys.Ecs.StorageKind
+Tralys.Ecs.StorageKind.Sparse = 1 -> Tralys.Ecs.StorageKind
+Tralys.Ecs.StructuralAttribute
+Tralys.Ecs.StructuralAttribute.StructuralAttribute() -> void
+Tralys.Ecs.SystemAttribute
+Tralys.Ecs.SystemAttribute.SystemAttribute() -> void
+Tralys.Ecs.SystemBase
+Tralys.Ecs.SystemBase.GetDescriptor() -> Tralys.Ecs.SystemDescriptor!
+Tralys.Ecs.SystemBase.Run(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.SystemBase.Run<TTick>(Tralys.Ecs.World! world, in TTick tick) -> void
+Tralys.Ecs.SystemBase.SystemBase() -> void
+Tralys.Ecs.SystemDescriptor
+Tralys.Ecs.SystemDescriptor.Id.get -> Tralys.Ecs.SystemId
+Tralys.Ecs.SystemDescriptor.Name.get -> string!
+Tralys.Ecs.SystemDescriptor.Order.get -> Tralys.Ecs.SystemOrder!
+Tralys.Ecs.SystemDescriptor.Parallel.get -> bool
+Tralys.Ecs.SystemDescriptor.SystemDescriptor(string! name, System.Type? type = null, Tralys.Ecs.SystemOrder? order = null, bool parallel = false) -> void
+Tralys.Ecs.SystemDescriptor.Type.get -> System.Type?
+Tralys.Ecs.SystemId
+Tralys.Ecs.SystemId.Equals(Tralys.Ecs.SystemId other) -> bool
+Tralys.Ecs.SystemId.SystemId() -> void
+Tralys.Ecs.SystemId.Value.get -> int
+Tralys.Ecs.SystemOrder
+Tralys.Ecs.SystemOrder.Set.get -> System.Type?
+Tralys.Ecs.SystemOrder.SystemOrder(System.Type? set) -> void
+Tralys.Ecs.SystemRunScope
+Tralys.Ecs.SystemRunScope.Dispose() -> void
+Tralys.Ecs.SystemRunScope.SystemRunScope() -> void
+Tralys.Ecs.SystemSetAttribute
+Tralys.Ecs.SystemSetAttribute.SystemSetAttribute() -> void
+Tralys.Ecs.TagAttribute
+Tralys.Ecs.TagAttribute.Inherited.get -> bool
+Tralys.Ecs.TagAttribute.Inherited.set -> void
+Tralys.Ecs.TagAttribute.SchemaVersion.get -> int
+Tralys.Ecs.TagAttribute.SchemaVersion.set -> void
+Tralys.Ecs.TagAttribute.TagAttribute() -> void
+Tralys.Ecs.TargetPolicy
+Tralys.Ecs.TargetPolicy.DestroySource = 1 -> Tralys.Ecs.TargetPolicy
+Tralys.Ecs.TargetPolicy.RemoveEdge = 0 -> Tralys.Ecs.TargetPolicy
+Tralys.Ecs.TargetPolicy.Throw = 2 -> Tralys.Ecs.TargetPolicy
+Tralys.Ecs.TargetPolicyException
+Tralys.Ecs.TargetPolicyException.TargetPolicyException(string! message) -> void
+Tralys.Ecs.TrackedAttribute
+Tralys.Ecs.TrackedAttribute.TrackedAttribute() -> void
+Tralys.Ecs.TrackedSpan<T>
+Tralys.Ecs.TrackedSpan<T>.Edit(int row) -> Tralys.Ecs.ColumnEdit<T>
+Tralys.Ecs.TrackedSpan<T>.Length.get -> int
+Tralys.Ecs.TrackedSpan<T>.TrackedSpan() -> void
+Tralys.Ecs.TrackedSpan<T>.Tracks.get -> bool
+Tralys.Ecs.TrackedSpan<T>.this[int row].get -> T
+Tralys.Ecs.UniqueIndex<TKey>
+Tralys.Ecs.UniqueIndex<TKey>.Contains(in TKey key) -> bool
+Tralys.Ecs.UniqueIndex<TKey>.Get(in TKey key) -> Tralys.Ecs.Entity
+Tralys.Ecs.UniqueIndex<TKey>.IncludeDetached() -> Tralys.Ecs.UniqueIndex<TKey>
+Tralys.Ecs.UniqueIndex<TKey>.TryGet(in TKey key, out Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.UniqueIndex<TKey>.UniqueIndex() -> void
+Tralys.Ecs.UniqueIndexAttribute
+Tralys.Ecs.UniqueIndexAttribute.OnConflict.get -> Tralys.Ecs.ConflictPolicy
+Tralys.Ecs.UniqueIndexAttribute.OnConflict.set -> void
+Tralys.Ecs.UniqueIndexAttribute.PerParent.get -> bool
+Tralys.Ecs.UniqueIndexAttribute.PerParent.set -> void
+Tralys.Ecs.UniqueIndexAttribute.UniqueIndexAttribute(params string![]! fields) -> void
+Tralys.Ecs.UnresolvedPolicy
+Tralys.Ecs.UnresolvedPolicy.Defer = 1 -> Tralys.Ecs.UnresolvedPolicy
+Tralys.Ecs.UnresolvedPolicy.Fail = 2 -> Tralys.Ecs.UnresolvedPolicy
+Tralys.Ecs.UnresolvedPolicy.Null = 0 -> Tralys.Ecs.UnresolvedPolicy
+Tralys.Ecs.UntrackedScope
+Tralys.Ecs.UntrackedScope.Dispose() -> void
+Tralys.Ecs.UntrackedScope.UntrackedScope() -> void
+Tralys.Ecs.Up<T>
+Tralys.Ecs.Up<T>.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.Up<T>.HasValue.get -> bool
+Tralys.Ecs.Up<T>.Up() -> void
+Tralys.Ecs.Up<T>.Value.get -> T
+Tralys.Ecs.ViewAttribute
+Tralys.Ecs.ViewAttribute.ViewAttribute() -> void
+Tralys.Ecs.ViewLookup<TView>
+Tralys.Ecs.ViewLookup<TView>.TryGet(Tralys.Ecs.Entity entity, out TView view) -> bool
+Tralys.Ecs.ViewLookup<TView>.ViewLookup() -> void
+Tralys.Ecs.ViewLookup<TView>.ViewLookup(Tralys.Ecs.World! world) -> void
+Tralys.Ecs.WatchBuilder<TBits>
+Tralys.Ecs.WatchBuilder<TBits>.Component<T>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WatchBuilder<TBits>.Descendants<TOwner>(TBits bits) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WatchBuilder<TBits>.Presence<T>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WatchBuilder<TBits>.Relation<R>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WatchBuilder<TBits>.Rows<TKey, TRow>(TBits bits, Tralys.Ecs.Hop hop = default(Tralys.Ecs.Hop)) -> Tralys.Ecs.WatchBuilder<TBits>!
+Tralys.Ecs.WatchResult
+Tralys.Ecs.WatchResult.Changed = 1 -> Tralys.Ecs.WatchResult
+Tralys.Ecs.WatchResult.EntityGone = 3 -> Tralys.Ecs.WatchResult
+Tralys.Ecs.WatchResult.Removed = 2 -> Tralys.Ecs.WatchResult
+Tralys.Ecs.WatchResult.Unchanged = 0 -> Tralys.Ecs.WatchResult
+Tralys.Ecs.WithAttribute<T>
+Tralys.Ecs.WithAttribute<T>.WithAttribute() -> void
+Tralys.Ecs.WithoutAttribute<T>
+Tralys.Ecs.WithoutAttribute<T>.WithoutAttribute() -> void
+Tralys.Ecs.World
+Tralys.Ecs.World.Add<T>(Tralys.Ecs.Entity entity, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.AdvanceVersion() -> void
+Tralys.Ecs.World.AttributedLog.get -> Tralys.Ecs.AttributedLog!
+Tralys.Ecs.World.Batch(Tralys.Ecs.Entity entity) -> Tralys.Ecs.EntityBatch
+Tralys.Ecs.World.BeginSystemRun(Tralys.Ecs.SystemId system) -> Tralys.Ecs.SystemRunScope
+Tralys.Ecs.World.BindToCurrentThread() -> void
+Tralys.Ecs.World.Buffers<T>() -> Tralys.Ecs.BufferArena<T>!
+Tralys.Ecs.World.CancelDestroy(Tralys.Ecs.Entity entity, string! file = "", int line = 0) -> bool
+Tralys.Ecs.World.Capture(System.ReadOnlySpan<Tralys.Ecs.Entity> roots, in Tralys.Ecs.CaptureOptions options = default(Tralys.Ecs.CaptureOptions)) -> Tralys.Ecs.CaptureImage!
+Tralys.Ecs.World.Changes.get -> Tralys.Ecs.ChangeTracking!
+Tralys.Ecs.World.Children(Tralys.Ecs.Entity entity) -> Tralys.Ecs.EntityList
+Tralys.Ecs.World.Clear() -> void
+Tralys.Ecs.World.ClearParent(Tralys.Ecs.Entity child, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.ClearSources<R>(Tralys.Ecs.Entity target, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.ClearTargets<R>(Tralys.Ecs.Entity source, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Create(string! file = "", int line = 0) -> Tralys.Ecs.Entity
+Tralys.Ecs.World.Create<TBundle>(in TBundle bundle, string! file = "", int line = 0) -> Tralys.Ecs.Entity
+Tralys.Ecs.World.CurrentSystem.get -> Tralys.Ecs.SystemId
+Tralys.Ecs.World.Depth(Tralys.Ecs.Entity entity) -> int
+Tralys.Ecs.World.Destroy(Tralys.Ecs.Entity entity, Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Detach(Tralys.Ecs.Entity entity, Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Dispose() -> void
+Tralys.Ecs.World.Edit<T>(Tralys.Ecs.Entity entity) -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.World.EditOrAdd<T>(Tralys.Ecs.Entity entity, in T initial = default(T), string! file = "", int line = 0) -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.World.EditSingleton<T>() -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.World.EntityCount.get -> int
+Tralys.Ecs.World.Exists(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.World.Extract(System.ReadOnlySpan<Tralys.Ecs.Entity> roots, in Tralys.Ecs.CaptureOptions options = default(Tralys.Ecs.CaptureOptions), Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> Tralys.Ecs.ExtractResult
+Tralys.Ecs.World.Faults.get -> Tralys.Ecs.IFaultSink?
+Tralys.Ecs.World.Faults.set -> void
+Tralys.Ecs.World.Find<T>(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Optional<T>
+Tralys.Ecs.World.FindDanglingReferences(System.Collections.Generic.ICollection<Tralys.Ecs.DanglingReference>! into) -> int
+Tralys.Ecs.World.FindEdit<T>(Tralys.Ecs.Entity entity) -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.World.Get<T>(Tralys.Ecs.Entity entity) -> T
+Tralys.Ecs.World.GetAttachment<T>() -> T!
+Tralys.Ecs.World.GetSingleton<T>() -> T
+Tralys.Ecs.World.Has<T>(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.World.HasRelation<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity target) -> bool
+Tralys.Ecs.World.HasSingleton<T>() -> bool
+Tralys.Ecs.World.HasStored<T>(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.World.Introspection.get -> Tralys.Ecs.WorldIntrospection
+Tralys.Ecs.World.IsDetached(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.World.IsEffective<T>(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.World.IsLive(Tralys.Ecs.Entity entity) -> bool
+Tralys.Ecs.World.Observers.get -> Tralys.Ecs.ObserverRegistry!
+Tralys.Ecs.World.Parent(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Entity
+Tralys.Ecs.World.Playback(bool finalizeDestroys = true) -> void
+Tralys.Ecs.World.PlaybackOwed.get -> bool
+Tralys.Ecs.World.Query(Tralys.Ecs.QueryDesc! desc) -> Tralys.Ecs.CachedQuery!
+Tralys.Ecs.World.Reattach(Tralys.Ecs.Entity entity, Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.World.ReferenceFaults.get -> Tralys.Ecs.IReferenceFaultSink?
+Tralys.Ecs.World.ReferenceFaults.set -> void
+Tralys.Ecs.World.Registry.get -> Tralys.Ecs.Registry!
+Tralys.Ecs.World.Relate<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, in R payload = default(R), string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Remove(Tralys.Ecs.Entity entity, Tralys.Ecs.ComponentDescriptor! type, string! file = "", int line = 0) -> bool
+Tralys.Ecs.World.Remove<T>(Tralys.Ecs.Entity entity, string! file = "", int line = 0) -> bool
+Tralys.Ecs.World.RemoveAll<T>(string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Replace<T>(Tralys.Ecs.Entity entity, in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Reset(Tralys.Ecs.WorldSnapshot! baseline) -> void
+Tralys.Ecs.World.Restore(Tralys.Ecs.CaptureImage! image, in Tralys.Ecs.RestoreOptions options = default(Tralys.Ecs.RestoreOptions), string! file = "", int line = 0) -> Tralys.Ecs.RestoreResult
+Tralys.Ecs.World.Retarget<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity oldTarget, Tralys.Ecs.Entity newTarget, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.RowOwners<TKey, TRow>(in TKey key) -> Tralys.Ecs.EntityList
+Tralys.Ecs.World.Rows<TKey, TRow>(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Rows<TKey, TRow>
+Tralys.Ecs.World.Scratch.get -> Tralys.Ecs.WorldScratch!
+Tralys.Ecs.World.Set(Tralys.Ecs.Entity entity, Tralys.Ecs.ComponentDescriptor! type, System.ReadOnlySpan<byte> value, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.Set<T>(Tralys.Ecs.Entity entity, in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.SetAttachment<T>(T! attachment) -> void
+Tralys.Ecs.World.SetEnabled<T>(Tralys.Ecs.Entity entity, bool enabled, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.SetOrRemove<T>(Tralys.Ecs.Entity entity, in T? value, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.SetParent(Tralys.Ecs.Entity child, Tralys.Ecs.Entity parent, int index = -1, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.SetSingleton<T>(in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.World.SingletonEntity<T>() -> Tralys.Ecs.Entity
+Tralys.Ecs.World.Snapshot() -> Tralys.Ecs.WorldSnapshot!
+Tralys.Ecs.World.SnapshotChildren(Tralys.Ecs.Entity parent) -> Tralys.Ecs.ScratchBuffer<Tralys.Ecs.Entity>
+Tralys.Ecs.World.SnapshotSources<R>(Tralys.Ecs.Entity target) -> Tralys.Ecs.ScratchBuffer<Tralys.Ecs.Entity>
+Tralys.Ecs.World.SnapshotSubtree(Tralys.Ecs.Entity root) -> Tralys.Ecs.ScratchBuffer<Tralys.Ecs.Entity>
+Tralys.Ecs.World.SnapshotTargets<R>(Tralys.Ecs.Entity source) -> Tralys.Ecs.ScratchBuffer<Tralys.Ecs.Entity>
+Tralys.Ecs.World.Sources<R>(Tralys.Ecs.Entity target) -> Tralys.Ecs.EntityList
+Tralys.Ecs.World.StateOf(Tralys.Ecs.Entity entity) -> Tralys.Ecs.LifecycleState
+Tralys.Ecs.World.Targets<R>(Tralys.Ecs.Entity source) -> Tralys.Ecs.RelationTargets<R>
+Tralys.Ecs.World.TrimExcess() -> void
+Tralys.Ecs.World.TryGet<T>(Tralys.Ecs.Entity entity, out T value) -> bool
+Tralys.Ecs.World.TryGetAttachment<T>(out T? attachment) -> bool
+Tralys.Ecs.World.TryGetRelation<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, out R payload) -> bool
+Tralys.Ecs.World.TryGetSingleton<T>(out T value) -> bool
+Tralys.Ecs.World.TryGetStored<T>(Tralys.Ecs.Entity entity, out T value) -> bool
+Tralys.Ecs.World.Unrelate<R>(Tralys.Ecs.Entity source, Tralys.Ecs.Entity target, string! file = "", int line = 0) -> bool
+Tralys.Ecs.World.Untracked() -> Tralys.Ecs.UntrackedScope
+Tralys.Ecs.World.Version.get -> ulong
+Tralys.Ecs.World.WorkerCount.get -> int
+Tralys.Ecs.WorldDifference
+Tralys.Ecs.WorldDifference.Deconstruct(out Tralys.Ecs.DifferenceKind Kind, out int Position, out Tralys.Ecs.Entity Left, out Tralys.Ecs.Entity Right, out Tralys.Ecs.ComponentDescriptor? Type) -> void
+Tralys.Ecs.WorldDifference.Equals(Tralys.Ecs.WorldDifference other) -> bool
+Tralys.Ecs.WorldDifference.Kind.get -> Tralys.Ecs.DifferenceKind
+Tralys.Ecs.WorldDifference.Kind.init -> void
+Tralys.Ecs.WorldDifference.Left.get -> Tralys.Ecs.Entity
+Tralys.Ecs.WorldDifference.Left.init -> void
+Tralys.Ecs.WorldDifference.Position.get -> int
+Tralys.Ecs.WorldDifference.Position.init -> void
+Tralys.Ecs.WorldDifference.Right.get -> Tralys.Ecs.Entity
+Tralys.Ecs.WorldDifference.Right.init -> void
+Tralys.Ecs.WorldDifference.Type.get -> Tralys.Ecs.ComponentDescriptor?
+Tralys.Ecs.WorldDifference.Type.init -> void
+Tralys.Ecs.WorldDifference.WorldDifference() -> void
+Tralys.Ecs.WorldDifference.WorldDifference(Tralys.Ecs.DifferenceKind Kind, int Position, Tralys.Ecs.Entity Left, Tralys.Ecs.Entity Right, Tralys.Ecs.ComponentDescriptor? Type) -> void
+Tralys.Ecs.WorldEntity
+Tralys.Ecs.WorldEntity.Add<T>(string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.Children() -> Tralys.Ecs.EntityList
+Tralys.Ecs.WorldEntity.ClearParent(string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.Destroy(Tralys.Ecs.LifecycleReason reason = default(Tralys.Ecs.LifecycleReason), string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.Edit<T>() -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.WorldEntity.EditOrAdd<T>(in T initial = default(T), string! file = "", int line = 0) -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.WorldEntity.Entity.get -> Tralys.Ecs.Entity
+Tralys.Ecs.WorldEntity.Equals(Tralys.Ecs.Entity other) -> bool
+Tralys.Ecs.WorldEntity.Equals(Tralys.Ecs.WorldEntity other) -> bool
+Tralys.Ecs.WorldEntity.Find<T>() -> Tralys.Ecs.Optional<T>
+Tralys.Ecs.WorldEntity.FindEdit<T>() -> Tralys.Ecs.ComponentEdit<T>
+Tralys.Ecs.WorldEntity.Get<T>() -> T
+Tralys.Ecs.WorldEntity.Has<T>() -> bool
+Tralys.Ecs.WorldEntity.HasStored<T>() -> bool
+Tralys.Ecs.WorldEntity.IsLive.get -> bool
+Tralys.Ecs.WorldEntity.Parent() -> Tralys.Ecs.WorldEntity
+Tralys.Ecs.WorldEntity.Remove<T>(string! file = "", int line = 0) -> bool
+Tralys.Ecs.WorldEntity.Replace<T>(in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.Set<T>(in T value, string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.SetEnabled<T>(bool enabled, string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.SetOrRemove<T>(in T? value, string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.SetParent(Tralys.Ecs.Entity parent, int index = -1, string! file = "", int line = 0) -> void
+Tralys.Ecs.WorldEntity.State.get -> Tralys.Ecs.LifecycleState
+Tralys.Ecs.WorldEntity.TryAs<TView>(out TView view) -> bool
+Tralys.Ecs.WorldEntity.TryGet<T>(out T value) -> bool
+Tralys.Ecs.WorldEntity.TryGetStored<T>(out T value) -> bool
+Tralys.Ecs.WorldEntity.World.get -> Tralys.Ecs.World!
+Tralys.Ecs.WorldEntity.WorldEntity() -> void
+Tralys.Ecs.WorldEntity.WorldEntity(Tralys.Ecs.World! world, Tralys.Ecs.Entity entity) -> void
+Tralys.Ecs.WorldIntrospection
+Tralys.Ecs.WorldIntrospection.ArchetypeCount.get -> int
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.ArchetypeEnumerable() -> void
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.Count.get -> int
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.Enumerator
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.Enumerator.Current.get -> Tralys.Ecs.ArchetypeInfo
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.Enumerator.Enumerator() -> void
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.Enumerator.MoveNext() -> bool
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.GetEnumerator() -> Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.Enumerator
+Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable.this[int index].get -> Tralys.Ecs.ArchetypeInfo
+Tralys.Ecs.WorldIntrospection.Archetypes.get -> Tralys.Ecs.WorldIntrospection.ArchetypeEnumerable
+Tralys.Ecs.WorldIntrospection.ChunkCount.get -> int
+Tralys.Ecs.WorldIntrospection.ChunksSkipped.get -> long
+Tralys.Ecs.WorldIntrospection.ChunksVisited.get -> long
+Tralys.Ecs.WorldIntrospection.Components.get -> System.ReadOnlySpan<Tralys.Ecs.ComponentDescriptor!>
+Tralys.Ecs.WorldIntrospection.LastPlayback.get -> Tralys.Ecs.PlaybackStats
+Tralys.Ecs.WorldIntrospection.MeanChunkFill.get -> double
+Tralys.Ecs.WorldIntrospection.Queries.get -> Tralys.Ecs.WorldIntrospection.QueryEnumerable
+Tralys.Ecs.WorldIntrospection.QueryEnumerable
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.Count.get -> int
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.Enumerator
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.Enumerator.Current.get -> Tralys.Ecs.QueryInfo
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.Enumerator.Enumerator() -> void
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.Enumerator.MoveNext() -> bool
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.GetEnumerator() -> Tralys.Ecs.WorldIntrospection.QueryEnumerable.Enumerator
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.QueryEnumerable() -> void
+Tralys.Ecs.WorldIntrospection.QueryEnumerable.this[int index].get -> Tralys.Ecs.QueryInfo
+Tralys.Ecs.WorldIntrospection.StructuralChanges.get -> long
+Tralys.Ecs.WorldIntrospection.VisitEntity<TVisitor>(Tralys.Ecs.Entity entity, ref TVisitor visitor) -> void
+Tralys.Ecs.WorldIntrospection.WorldIntrospection() -> void
+Tralys.Ecs.WorldOptions
+Tralys.Ecs.WorldOptions.AttributedLogCapacity.get -> int
+Tralys.Ecs.WorldOptions.AttributedLogCapacity.init -> void
+Tralys.Ecs.WorldOptions.CheckThread.get -> bool
+Tralys.Ecs.WorldOptions.CheckThread.init -> void
+Tralys.Ecs.WorldOptions.ChunkCapacity.get -> int
+Tralys.Ecs.WorldOptions.ChunkCapacity.init -> void
+Tralys.Ecs.WorldOptions.Equals(Tralys.Ecs.WorldOptions other) -> bool
+Tralys.Ecs.WorldOptions.Executor.get -> Tralys.Ecs.IChunkExecutor?
+Tralys.Ecs.WorldOptions.Executor.init -> void
+Tralys.Ecs.WorldOptions.VerifyReferences.get -> bool
+Tralys.Ecs.WorldOptions.VerifyReferences.init -> void
+Tralys.Ecs.WorldOptions.WatchQueueCap.get -> int
+Tralys.Ecs.WorldOptions.WatchQueueCap.init -> void
+Tralys.Ecs.WorldOptions.WorldOptions() -> void
+Tralys.Ecs.WorldScratch
+Tralys.Ecs.WorldScratch.Rent<T>(int minimumLength) -> Tralys.Ecs.ScratchBuffer<T>
+Tralys.Ecs.WorldSnapshot
+Tralys.Ecs.WorldSnapshot.EntityCount.get -> int
+abstract Tralys.Ecs.SystemBase.CreateDescriptor() -> Tralys.Ecs.SystemDescriptor!
+abstract Tralys.Ecs.SystemBase.OnRun(in Tralys.Ecs.RunContext context) -> void
+override Tralys.Ecs.AttributedLogEntry.GetHashCode() -> int
+override Tralys.Ecs.BufferHandle<T>.Equals(object? obj) -> bool
+override Tralys.Ecs.BufferHandle<T>.GetHashCode() -> int
+override Tralys.Ecs.CallSite.GetHashCode() -> int
+override Tralys.Ecs.CallSite.ToString() -> string!
+override Tralys.Ecs.CaptureOptions.GetHashCode() -> int
+override Tralys.Ecs.CategoryMask.GetHashCode() -> int
+override Tralys.Ecs.ComponentDescriptor.ToString() -> string!
+override Tralys.Ecs.CursorId.GetHashCode() -> int
+override Tralys.Ecs.CursorId.ToString() -> string!
+override Tralys.Ecs.CursorOptions.GetHashCode() -> int
+override Tralys.Ecs.DanglingReference.GetHashCode() -> int
+override Tralys.Ecs.DanglingReference.ToString() -> string!
+override Tralys.Ecs.DeferredRef.GetHashCode() -> int
+override Tralys.Ecs.Entity.Equals(object? obj) -> bool
+override Tralys.Ecs.Entity.GetHashCode() -> int
+override Tralys.Ecs.Entity.ToString() -> string!
+override Tralys.Ecs.ExternalRef.GetHashCode() -> int
+override Tralys.Ecs.FieldDescriptor.Equals(object? obj) -> bool
+override Tralys.Ecs.FieldDescriptor.GetHashCode() -> int
+override Tralys.Ecs.FieldDescriptor.ToString() -> string!
+override Tralys.Ecs.IndexConflict.GetHashCode() -> int
+override Tralys.Ecs.IndexConflict.ToString() -> string!
+override Tralys.Ecs.LifecycleReason.GetHashCode() -> int
+override Tralys.Ecs.LogEntry.GetHashCode() -> int
+override Tralys.Ecs.ObserverId.GetHashCode() -> int
+override Tralys.Ecs.PassthroughUse.Equals(object? obj) -> bool
+override Tralys.Ecs.PassthroughUse.GetHashCode() -> int
+override Tralys.Ecs.PassthroughUse.ToString() -> string!
+override Tralys.Ecs.PlaybackStats.GetHashCode() -> int
+override Tralys.Ecs.RestoreOptions.GetHashCode() -> int
+override Tralys.Ecs.SystemDescriptor.ToString() -> string!
+override Tralys.Ecs.SystemId.GetHashCode() -> int
+override Tralys.Ecs.WorldDifference.GetHashCode() -> int
+override Tralys.Ecs.WorldDifference.ToString() -> string!
+override Tralys.Ecs.WorldEntity.Equals(object? obj) -> bool
+override Tralys.Ecs.WorldEntity.GetHashCode() -> int
+override Tralys.Ecs.WorldOptions.GetHashCode() -> int
+static Tralys.Ecs.AttributedLogEntry.operator !=(Tralys.Ecs.AttributedLogEntry left, Tralys.Ecs.AttributedLogEntry right) -> bool
+static Tralys.Ecs.AttributedLogEntry.operator ==(Tralys.Ecs.AttributedLogEntry left, Tralys.Ecs.AttributedLogEntry right) -> bool
+static Tralys.Ecs.BufferHandle<T>.operator !=(Tralys.Ecs.BufferHandle<T> left, Tralys.Ecs.BufferHandle<T> right) -> bool
+static Tralys.Ecs.BufferHandle<T>.operator ==(Tralys.Ecs.BufferHandle<T> left, Tralys.Ecs.BufferHandle<T> right) -> bool
+static Tralys.Ecs.CallSite.operator !=(Tralys.Ecs.CallSite left, Tralys.Ecs.CallSite right) -> bool
+static Tralys.Ecs.CallSite.operator ==(Tralys.Ecs.CallSite left, Tralys.Ecs.CallSite right) -> bool
+static Tralys.Ecs.CaptureImage.Compare(Tralys.Ecs.CaptureImage! left, Tralys.Ecs.CaptureImage! right) -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.WorldDifference>!
+static Tralys.Ecs.CaptureImage.Read(System.IO.Stream! stream, Tralys.Ecs.Registry! registry) -> Tralys.Ecs.CaptureImage!
+static Tralys.Ecs.CaptureOptions.operator !=(Tralys.Ecs.CaptureOptions left, Tralys.Ecs.CaptureOptions right) -> bool
+static Tralys.Ecs.CaptureOptions.operator ==(Tralys.Ecs.CaptureOptions left, Tralys.Ecs.CaptureOptions right) -> bool
+static Tralys.Ecs.CategoryMask.All.get -> Tralys.Ecs.CategoryMask
+static Tralys.Ecs.CategoryMask.Of(params System.ReadOnlySpan<int> bits) -> Tralys.Ecs.CategoryMask
+static Tralys.Ecs.CategoryMask.operator !=(Tralys.Ecs.CategoryMask left, Tralys.Ecs.CategoryMask right) -> bool
+static Tralys.Ecs.CategoryMask.operator ==(Tralys.Ecs.CategoryMask left, Tralys.Ecs.CategoryMask right) -> bool
+static Tralys.Ecs.CursorId.operator !=(Tralys.Ecs.CursorId left, Tralys.Ecs.CursorId right) -> bool
+static Tralys.Ecs.CursorId.operator ==(Tralys.Ecs.CursorId left, Tralys.Ecs.CursorId right) -> bool
+static Tralys.Ecs.CursorOptions.operator !=(Tralys.Ecs.CursorOptions left, Tralys.Ecs.CursorOptions right) -> bool
+static Tralys.Ecs.CursorOptions.operator ==(Tralys.Ecs.CursorOptions left, Tralys.Ecs.CursorOptions right) -> bool
+static Tralys.Ecs.DanglingReference.operator !=(Tralys.Ecs.DanglingReference left, Tralys.Ecs.DanglingReference right) -> bool
+static Tralys.Ecs.DanglingReference.operator ==(Tralys.Ecs.DanglingReference left, Tralys.Ecs.DanglingReference right) -> bool
+static Tralys.Ecs.DeferredRef.operator !=(Tralys.Ecs.DeferredRef left, Tralys.Ecs.DeferredRef right) -> bool
+static Tralys.Ecs.DeferredRef.operator ==(Tralys.Ecs.DeferredRef left, Tralys.Ecs.DeferredRef right) -> bool
+static Tralys.Ecs.Entity.FromBits(ulong bits) -> Tralys.Ecs.Entity
+static Tralys.Ecs.Entity.operator !=(Tralys.Ecs.Entity left, Tralys.Ecs.Entity right) -> bool
+static Tralys.Ecs.Entity.operator ==(Tralys.Ecs.Entity left, Tralys.Ecs.Entity right) -> bool
+static Tralys.Ecs.ExternalRef.operator !=(Tralys.Ecs.ExternalRef left, Tralys.Ecs.ExternalRef right) -> bool
+static Tralys.Ecs.ExternalRef.operator ==(Tralys.Ecs.ExternalRef left, Tralys.Ecs.ExternalRef right) -> bool
+static Tralys.Ecs.FieldDescriptor.operator !=(Tralys.Ecs.FieldDescriptor? left, Tralys.Ecs.FieldDescriptor? right) -> bool
+static Tralys.Ecs.FieldDescriptor.operator ==(Tralys.Ecs.FieldDescriptor? left, Tralys.Ecs.FieldDescriptor? right) -> bool
+static Tralys.Ecs.Generated.BufferOps.For<THandle>() -> Tralys.Ecs.Generated.BufferOps
+static Tralys.Ecs.Generated.IndexFactory.Multi<TComponent, TKey, TKeyer>() -> Tralys.Ecs.Generated.IndexFactory
+static Tralys.Ecs.Generated.IndexFactory.Ordered<TComponent, TKey, TKeyer>() -> Tralys.Ecs.Generated.IndexFactory
+static Tralys.Ecs.Generated.IndexFactory.Unique<TComponent, TKey, TKeyer>() -> Tralys.Ecs.Generated.IndexFactory
+static Tralys.Ecs.Generated.Plumbing.Changed<T>(in Tralys.Ecs.TrackedSpan<T> span, int row, in T before) -> void
+static Tralys.Ecs.Generated.Plumbing.Collect(in Tralys.Ecs.ChunkView chunk, int row) -> void
+static Tralys.Ecs.Generated.Plumbing.Column<T>(in Tralys.Ecs.ChunkView chunk, int term) -> System.Span<T>
+static Tralys.Ecs.Generated.Plumbing.Compares<T>(in Tralys.Ecs.SparseTerm<T> term) -> bool
+static Tralys.Ecs.Generated.Plumbing.Compares<T>(in Tralys.Ecs.TrackedSpan<T> span) -> bool
+static Tralys.Ecs.Generated.Plumbing.CreateDescriptor<T>(Tralys.Ecs.Generated.ComponentInfo! info) -> Tralys.Ecs.ComponentDescriptor!
+static Tralys.Ecs.Generated.Plumbing.EnsureSystemRun(Tralys.Ecs.World! world, Tralys.Ecs.SystemId system) -> Tralys.Ecs.SystemRunScope
+static Tralys.Ecs.Generated.Plumbing.Find<T>(in Tralys.Ecs.SparseTerm<T> term, Tralys.Ecs.Entity entity, out int slot) -> T
+static Tralys.Ecs.Generated.Plumbing.HasRow(in Tralys.Ecs.ChunkView chunk, int term, int row) -> bool
+static Tralys.Ecs.Generated.Plumbing.MultiIndexOf<TComponent, TKey>(Tralys.Ecs.World! world, int ordinal) -> Tralys.Ecs.MultiIndex<TKey>
+static Tralys.Ecs.Generated.Plumbing.Optional<T>(ref readonly T value) -> Tralys.Ecs.Optional<T>
+static Tralys.Ecs.Generated.Plumbing.OptionalRef<T>(ref T value) -> Tralys.Ecs.OptionalRef<T>
+static Tralys.Ecs.Generated.Plumbing.OrderedIndexOf<TComponent, TKey>(Tralys.Ecs.World! world, int ordinal) -> Tralys.Ecs.OrderedIndex<TKey>
+static Tralys.Ecs.Generated.Plumbing.ParentTerm<T>(Tralys.Ecs.World! world, Tralys.Ecs.Entity entity) -> Tralys.Ecs.Parent<T>
+static Tralys.Ecs.Generated.Plumbing.Release<T>(in Tralys.Ecs.SparseTerm<T> term, int slot, in T before) -> void
+static Tralys.Ecs.Generated.Plumbing.RowMask(in Tralys.Ecs.ChunkView chunk) -> ulong
+static Tralys.Ecs.Generated.Plumbing.Rows<TKey, TRow>(Tralys.Ecs.Commands commands, Tralys.Ecs.Entity entity) -> Tralys.Ecs.CommandRows<TKey, TRow>
+static Tralys.Ecs.Generated.Plumbing.Rows<TKey, TRow>(Tralys.Ecs.World! world, Tralys.Ecs.Entity entity) -> Tralys.Ecs.Rows<TKey, TRow>
+static Tralys.Ecs.Generated.Plumbing.Rows<TKey, TRow>(Tralys.Ecs.WorldEntity entity) -> Tralys.Ecs.Rows<TKey, TRow>
+static Tralys.Ecs.Generated.Plumbing.Same<T>(in T before, in T current) -> bool
+static Tralys.Ecs.Generated.Plumbing.Sparse<T>(in Tralys.Ecs.ChunkView chunk, int term) -> Tralys.Ecs.SparseTerm<T>
+static Tralys.Ecs.Generated.Plumbing.StampIfChanged<T>(in Tralys.Ecs.TrackedSpan<T> span, int row, in T before) -> void
+static Tralys.Ecs.Generated.Plumbing.StampOnly<T>(in Tralys.Ecs.ChunkView chunk, int term) -> Tralys.Ecs.TrackedSpan<T>
+static Tralys.Ecs.Generated.Plumbing.Tracked<T>(in Tralys.Ecs.ChunkView chunk, int term) -> Tralys.Ecs.TrackedSpan<T>
+static Tralys.Ecs.Generated.Plumbing.UniqueIndexOf<TComponent, TKey>(Tralys.Ecs.World! world, int ordinal) -> Tralys.Ecs.UniqueIndex<TKey>
+static Tralys.Ecs.Generated.Plumbing.Unstamped<T>(in Tralys.Ecs.TrackedSpan<T> span, int row) -> T
+static Tralys.Ecs.Generated.Plumbing.WorldOf<T>(Tralys.Ecs.IndexLookup<T> lookup) -> Tralys.Ecs.World!
+static Tralys.Ecs.Generated.RowStoreFactory.For<TKey, TRow>() -> Tralys.Ecs.Generated.RowStoreFactory
+static Tralys.Ecs.Hop.ChildrenThenSources<R>() -> Tralys.Ecs.Hop
+static Tralys.Ecs.Hop.Parent.get -> Tralys.Ecs.Hop
+static Tralys.Ecs.Hop.Self.get -> Tralys.Ecs.Hop
+static Tralys.Ecs.Hop.Sources<R>() -> Tralys.Ecs.Hop
+static Tralys.Ecs.Hop.Via<THop>() -> Tralys.Ecs.Hop
+static Tralys.Ecs.IndexConflict.operator !=(Tralys.Ecs.IndexConflict left, Tralys.Ecs.IndexConflict right) -> bool
+static Tralys.Ecs.IndexConflict.operator ==(Tralys.Ecs.IndexConflict left, Tralys.Ecs.IndexConflict right) -> bool
+static Tralys.Ecs.InlineExecutor.Instance.get -> Tralys.Ecs.InlineExecutor!
+static Tralys.Ecs.LifecycleReason.Cascade.get -> Tralys.Ecs.LifecycleReason
+static Tralys.Ecs.LifecycleReason.None.get -> Tralys.Ecs.LifecycleReason
+static Tralys.Ecs.LifecycleReason.Restored.get -> Tralys.Ecs.LifecycleReason
+static Tralys.Ecs.LifecycleReason.operator !=(Tralys.Ecs.LifecycleReason left, Tralys.Ecs.LifecycleReason right) -> bool
+static Tralys.Ecs.LifecycleReason.operator ==(Tralys.Ecs.LifecycleReason left, Tralys.Ecs.LifecycleReason right) -> bool
+static Tralys.Ecs.LogEntry.operator !=(Tralys.Ecs.LogEntry left, Tralys.Ecs.LogEntry right) -> bool
+static Tralys.Ecs.LogEntry.operator ==(Tralys.Ecs.LogEntry left, Tralys.Ecs.LogEntry right) -> bool
+static Tralys.Ecs.ObserverId.operator !=(Tralys.Ecs.ObserverId left, Tralys.Ecs.ObserverId right) -> bool
+static Tralys.Ecs.ObserverId.operator ==(Tralys.Ecs.ObserverId left, Tralys.Ecs.ObserverId right) -> bool
+static Tralys.Ecs.PassthroughUse.operator !=(Tralys.Ecs.PassthroughUse? left, Tralys.Ecs.PassthroughUse? right) -> bool
+static Tralys.Ecs.PassthroughUse.operator ==(Tralys.Ecs.PassthroughUse? left, Tralys.Ecs.PassthroughUse? right) -> bool
+static Tralys.Ecs.PlaybackStats.operator !=(Tralys.Ecs.PlaybackStats left, Tralys.Ecs.PlaybackStats right) -> bool
+static Tralys.Ecs.PlaybackStats.operator ==(Tralys.Ecs.PlaybackStats left, Tralys.Ecs.PlaybackStats right) -> bool
+static Tralys.Ecs.QueryDesc.Builder() -> Tralys.Ecs.QueryDescBuilder!
+static Tralys.Ecs.RefLookupExtensions.Edit<T>(this Tralys.Ecs.RefLookup<T> lookup, Tralys.Ecs.Entity entity) -> Tralys.Ecs.ComponentEdit<T>
+static Tralys.Ecs.RefLookupExtensions.FindEdit<T>(this Tralys.Ecs.RefLookup<T> lookup, Tralys.Ecs.Entity entity) -> Tralys.Ecs.ComponentEdit<T>
+static Tralys.Ecs.Registry.Build(params System.ReadOnlySpan<Tralys.Ecs.ComponentModule!> modules) -> Tralys.Ecs.Registry!
+static Tralys.Ecs.RestoreOptions.operator !=(Tralys.Ecs.RestoreOptions left, Tralys.Ecs.RestoreOptions right) -> bool
+static Tralys.Ecs.RestoreOptions.operator ==(Tralys.Ecs.RestoreOptions left, Tralys.Ecs.RestoreOptions right) -> bool
+static Tralys.Ecs.RunContext.WithTick<TTick>(Tralys.Ecs.World! world, in TTick tick, Tralys.Ecs.SystemId? system = null) -> Tralys.Ecs.RunContext
+static Tralys.Ecs.SystemId.Next() -> Tralys.Ecs.SystemId
+static Tralys.Ecs.SystemId.operator !=(Tralys.Ecs.SystemId left, Tralys.Ecs.SystemId right) -> bool
+static Tralys.Ecs.SystemId.operator ==(Tralys.Ecs.SystemId left, Tralys.Ecs.SystemId right) -> bool
+static Tralys.Ecs.SystemOrder.None.get -> Tralys.Ecs.SystemOrder!
+static Tralys.Ecs.World.Create(Tralys.Ecs.Registry! registry, in Tralys.Ecs.WorldOptions options = default(Tralys.Ecs.WorldOptions)) -> Tralys.Ecs.World!
+static Tralys.Ecs.WorldDifference.operator !=(Tralys.Ecs.WorldDifference left, Tralys.Ecs.WorldDifference right) -> bool
+static Tralys.Ecs.WorldDifference.operator ==(Tralys.Ecs.WorldDifference left, Tralys.Ecs.WorldDifference right) -> bool
+static Tralys.Ecs.WorldEntity.implicit operator Tralys.Ecs.Entity(Tralys.Ecs.WorldEntity entity) -> Tralys.Ecs.Entity
+static Tralys.Ecs.WorldEntity.operator !=(Tralys.Ecs.WorldEntity left, Tralys.Ecs.WorldEntity right) -> bool
+static Tralys.Ecs.WorldEntity.operator ==(Tralys.Ecs.WorldEntity left, Tralys.Ecs.WorldEntity right) -> bool
+static Tralys.Ecs.WorldOptions.operator !=(Tralys.Ecs.WorldOptions left, Tralys.Ecs.WorldOptions right) -> bool
+static Tralys.Ecs.WorldOptions.operator ==(Tralys.Ecs.WorldOptions left, Tralys.Ecs.WorldOptions right) -> bool
+virtual Tralys.Ecs.SystemBase.BindLookups(Tralys.Ecs.World! world) -> void
+~override Tralys.Ecs.AttributedLogEntry.Equals(object obj) -> bool
+~override Tralys.Ecs.AttributedLogEntry.ToString() -> string
+~override Tralys.Ecs.CallSite.Equals(object obj) -> bool
+~override Tralys.Ecs.CaptureOptions.Equals(object obj) -> bool
+~override Tralys.Ecs.CaptureOptions.ToString() -> string
+~override Tralys.Ecs.CategoryMask.Equals(object obj) -> bool
+~override Tralys.Ecs.CategoryMask.ToString() -> string
+~override Tralys.Ecs.CursorId.Equals(object obj) -> bool
+~override Tralys.Ecs.CursorOptions.Equals(object obj) -> bool
+~override Tralys.Ecs.CursorOptions.ToString() -> string
+~override Tralys.Ecs.DanglingReference.Equals(object obj) -> bool
+~override Tralys.Ecs.DeferredRef.Equals(object obj) -> bool
+~override Tralys.Ecs.DeferredRef.ToString() -> string
+~override Tralys.Ecs.ExternalRef.Equals(object obj) -> bool
+~override Tralys.Ecs.ExternalRef.ToString() -> string
+~override Tralys.Ecs.IndexConflict.Equals(object obj) -> bool
+~override Tralys.Ecs.LifecycleReason.Equals(object obj) -> bool
+~override Tralys.Ecs.LifecycleReason.ToString() -> string
+~override Tralys.Ecs.LogEntry.Equals(object obj) -> bool
+~override Tralys.Ecs.LogEntry.ToString() -> string
+~override Tralys.Ecs.ObserverId.Equals(object obj) -> bool
+~override Tralys.Ecs.ObserverId.ToString() -> string
+~override Tralys.Ecs.PlaybackStats.Equals(object obj) -> bool
+~override Tralys.Ecs.PlaybackStats.ToString() -> string
+~override Tralys.Ecs.RestoreOptions.Equals(object obj) -> bool
+~override Tralys.Ecs.RestoreOptions.ToString() -> string
+~override Tralys.Ecs.SystemId.Equals(object obj) -> bool
+~override Tralys.Ecs.SystemId.ToString() -> string
+~override Tralys.Ecs.WorldDifference.Equals(object obj) -> bool
+~override Tralys.Ecs.WorldOptions.Equals(object obj) -> bool
+~override Tralys.Ecs.WorldOptions.ToString() -> string
