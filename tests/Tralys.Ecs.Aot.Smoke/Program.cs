@@ -202,6 +202,24 @@ using (var pool = new WorkerPool(workers: 2))
     Check(schedule.Timing.ReadAll()[0].Sample.Runs == 1, "the schedule times each run");
 }
 
+// Only native AOT shows it: the JIT caches what AOT rebuilds per call, such as a Type's name.
+{
+    var builder = new ScheduleBuilder<SmokeTick>(SmokeSchedule.Declaration);
+    builder.Add(new LightenSystem());
+    builder.Observe(new PassThroughObserver());
+    var observed = builder.Build(world);
+    for (var i = 0; i < 8; i++)
+        observed.Run(new SmokeTick(i));
+    var before = GC.GetAllocatedBytesForCurrentThread();
+    for (var i = 0; i < 64; i++)
+        observed.Run(new SmokeTick(i));
+    var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+    Check(
+        allocated == 0,
+        $"an observed schedule run allocates nothing, but 64 runs took {allocated} B"
+    );
+}
+
 foreach (var failure in failures)
     Console.Error.WriteLine("FAILED: " + failure);
 Console.WriteLine(
@@ -283,6 +301,17 @@ sealed partial class CargoSystem : SystemBase
 readonly partial struct CarrierView;
 
 readonly record struct SmokeTick(double Seconds) : ITickContext;
+
+sealed class PassThroughObserver : IScheduleObserver
+{
+    public void RunSet(Type set, ScheduledWork work) => work.Run();
+
+    public void RunSystem(SystemDescriptor system, ScheduledWork work) => work.Run();
+
+    public void RunPlayback(string point, ScheduledWork work) => work.Run();
+
+    public void OnSystemSkipped(SystemDescriptor system, SystemSkip reason) { }
+}
 
 [SystemSet]
 sealed class Work;

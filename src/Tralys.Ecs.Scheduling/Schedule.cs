@@ -165,7 +165,8 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
         var type = declaration.Sets[set];
         var ran = false;
         observer.RunSet(type, Work(tick, ref ran, ScheduledWorkKind.Set, start, end, null));
-        CheckRan(observer, ran, type.Name);
+        if (!ran)
+            throw NotRan(observer, type.Name);
     }
 
     void RunSetSteps(in TTick tick, int start, int end)
@@ -208,7 +209,8 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
             point,
             Work(tick, ref ran, ScheduledWorkKind.Playback, finalizeDestroys ? 1 : 0, 0, point)
         );
-        CheckRan(observer, ran, point);
+        if (!ran)
+            throw NotRan(observer, point);
     }
 
     // With a sink, a failing playback is reported and the tick goes on; without one it propagates.
@@ -249,7 +251,8 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
                     slot.Descriptor,
                     Work(tick, ref ran, ScheduledWorkKind.System, slot.Index, 0, null)
                 );
-                CheckRan(observer, ran, slot.Descriptor.Name);
+                if (!ran)
+                    throw NotRan(observer, slot.Descriptor.Name);
             }
             return true;
         }
@@ -366,11 +369,8 @@ public sealed partial class Schedule<TTick> : IScheduleSteps
         }
     }
 
-    static void CheckRan(IScheduleObserver observer, bool ran, string work)
-    {
-        if (!ran)
-            throw new InvalidOperationException(
-                $"{observer.GetType().Name} returned without running {work}; an observer runs every work it is handed once."
-            );
-    }
+    static InvalidOperationException NotRan(IScheduleObserver observer, string work) =>
+        new(
+            $"{observer.GetType().Name} returned without running {work}; an observer runs every work it is handed once."
+        );
 }
