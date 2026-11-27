@@ -7,9 +7,10 @@ public ref struct UpCache<T>
     readonly World world;
     Entity lastParent;
     Entity lastFound;
+    int lastRecords;
 
-    /// <summary>An empty cache over <paramref name="world"/>; generated query bodies make one per chunk.</summary>
-    public UpCache(World world) => this.world = world;
+    /// <summary>An empty cache over the world <paramref name="chunk"/> belongs to; generated query bodies make one per chunk.</summary>
+    public UpCache(in ChunkView chunk) => world = chunk.world;
 
     /// <summary>The nearest strict ancestor of <paramref name="entity"/> holding <typeparamref name="T"/>, or a default <see cref="Up{T}"/>,
     /// whose <c>HasValue</c> is false, when none does.</summary>
@@ -18,7 +19,8 @@ public ref struct UpCache<T>
         var parent = world.hierarchy.ParentOf(entity);
         if (parent.IsDefault)
             return default;
-        if (parent == lastParent)
+        var records = world.stage.count;
+        if (parent == lastParent && records == lastRecords)
         {
             if (lastFound.IsDefault)
                 return default;
@@ -27,6 +29,7 @@ public ref struct UpCache<T>
                 return new Up<T>(lastFound, in cached.Value);
         }
         lastParent = parent;
+        lastRecords = records;
         for (var up = parent; !up.IsDefault; up = world.hierarchy.ParentOf(up))
         {
             var found = world.Find<T>(up);

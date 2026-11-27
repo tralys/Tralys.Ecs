@@ -3,16 +3,18 @@ using System.Runtime.CompilerServices;
 namespace Tralys.Ecs;
 
 // Segmented so an outstanding ref into a payload survives growth.
-internal abstract class PayloadStore
+internal abstract class PayloadStore : IMoveCount
 {
     protected const int SegmentBits = 6;
     protected const int SegmentSize = 1 << SegmentBits;
 
     public int Count;
 
-    public abstract ref byte RowRef(int index);
+    public int Resets;
 
-    public abstract void CopyToColumn(int index, Array column, int row);
+    int IMoveCount.MoveCount => Resets;
+
+    public abstract ref byte RowRef(int index);
 
     public abstract bool WriteToColumn(int index, Array column, int row, bool unlessEqual);
 
@@ -43,9 +45,6 @@ internal sealed class PayloadStore<T> : PayloadStore
 
     public override ref byte RowRef(int index) => ref Unsafe.As<T, byte>(ref this[index]);
 
-    public override void CopyToColumn(int index, Array column, int row) =>
-        Unsafe.As<T[]>(column)[row] = this[index];
-
     public override bool WriteToColumn(int index, Array column, int row, bool unlessEqual)
     {
         ref var cell = ref Unsafe.As<T[]>(column)[row];
@@ -72,5 +71,6 @@ internal sealed class PayloadStore<T> : PayloadStore
                 this[i] = default;
         }
         Count = 0;
+        Resets++;
     }
 }

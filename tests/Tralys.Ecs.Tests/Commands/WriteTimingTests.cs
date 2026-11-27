@@ -38,6 +38,26 @@ public sealed class WriteTimingTests
     }
 
     [Test]
+    public async Task An_edge_written_after_a_walk_left_its_ClearSources_waiting_lands_after_it()
+    {
+        using var world = TestWorlds.Create();
+        var source = world.Create();
+        var target = world.Create();
+        world.Set(target, new Position());
+
+        using (world.BeginDelivery())
+        {
+            foreach (var chunk in world.Query(QueryDesc.Builder().Read<Position>().Build()))
+            foreach (var _ in chunk.Rows)
+                world.ClearSources<Follows>(target);
+            world.Relate<Follows>(source, target);
+        }
+        world.Playback();
+
+        await Assert.That(world.HasRelation<Follows>(source, target)).IsTrue();
+    }
+
+    [Test]
     public async Task A_flip_undone_inside_an_observer_reads_the_stored_value()
     {
         using var world = TestWorlds.Create();

@@ -248,6 +248,8 @@ static class QueryEmitter
         var fields = new List<string>();
         if (!model.IsStatic)
             fields.Add("__self = this");
+        if (TakesWorld(model))
+            fields.Add($"__world = {names.World}");
         fields.AddRange(Args(model).Select(a => $"__arg_{a.Name} = {a.Name}"));
         writer.Line(
             fields.Count == 0
@@ -255,6 +257,9 @@ static class QueryEmitter
                 : $"var __kernel = new {KernelName(model)} {{ {string.Join(", ", fields)} }};"
         );
     }
+
+    static bool TakesWorld(QueryModel model) =>
+        model.Params.Items.Any(p => p.Kind == ParamKind.World);
 
     static void Kernel(CodeWriter writer, QueryModel model)
     {
@@ -266,9 +271,11 @@ static class QueryEmitter
         {
             if (!model.IsStatic)
                 writer.Line($"public {model.TypeName} __self;");
+            if (TakesWorld(model))
+                writer.Line($"public {Ecs}World __world;");
             foreach (var arg in Args(model))
                 writer.Line($"public {arg.Type} __arg_{arg.Name};");
-            if (!model.IsStatic || Args(model).Any())
+            if (!model.IsStatic || TakesWorld(model) || Args(model).Any())
                 writer.Line();
             var accumulatorParam = model.Accumulator is { } acc ? $", ref {acc} __acc" : "";
             using (
@@ -288,6 +295,7 @@ static class QueryEmitter
             )
         )
             writer.Line("var __entities = __chunk.Entities;");
+        var chunkLocals = new HashSet<ParamKind>();
         for (var n = 0; n < parameters.Length; n++)
         {
             var p = parameters[n];
@@ -308,19 +316,17 @@ static class QueryEmitter
                         $"var __s{n} = {Ecs}Generated.Plumbing.Sparse<{p.Type}>(in __chunk, {p.Term});"
                     );
                     break;
-                case ParamKind.Commands:
+                case ParamKind.Commands when chunkLocals.Add(p.Kind):
                     writer.Line("var __commands = __chunk.Commands;");
                     break;
-                case ParamKind.Context:
+                case ParamKind.Context when chunkLocals.Add(p.Kind):
                     writer.Line("var __context = __chunk.Context;");
                     break;
-                case ParamKind.World:
-                    writer.Line("var __world = __chunk.World;");
+                case ParamKind.Reader when chunkLocals.Add(p.Kind):
+                    writer.Line("var __reader = __chunk.Reader;");
                     break;
                 case ParamKind.Up:
-                    writer.Line(
-                        $"var __u{n} = new {Ecs}Generated.UpCache<{p.Type}>(__chunk.World);"
-                    );
+                    writer.Line($"var __u{n} = new {Ecs}Generated.UpCache<{p.Type}>(in __chunk);");
                     break;
             }
         }
@@ -337,6 +343,9 @@ static class QueryEmitter
             writer.Line(
                 "var __i = global::System.Numerics.BitOperations.TrailingZeroCount(__bits);"
             );
+            writer.Line($"if (!{Ecs}Generated.Plumbing.Visits(in __chunk, __i)) continue;");
+            if (parameters.Any(IsValue))
+                writer.Line($"var __p = {Ecs}Generated.Plumbing.Pending(in __chunk, __i);");
             var guards = new List<string>();
             var before = new List<string>();
             var after = new List<string>();
@@ -404,6 +413,9 @@ static class QueryEmitter
             case ParamKind.World:
                 args.Add("__world");
                 return;
+            case ParamKind.Reader:
+                args.Add("__reader");
+                return;
             case ParamKind.Arg:
                 args.Add($"{value}__arg_{p.Name}");
                 return;
@@ -412,7 +424,7 @@ static class QueryEmitter
                 return;
             case ParamKind.Parent:
                 args.Add(
-                    $"{Ecs}Generated.Plumbing.ParentTerm<{p.Type}>(__chunk.World, __entities[__i])"
+                    $"{Ecs}Generated.Plumbing.ParentTerm<{p.Type}>(in __chunk, __entities[__i])"
                 );
                 return;
             case ParamKind.Up:
@@ -420,81 +432,97 @@ static class QueryEmitter
                 return;
         }
 
+        const string P = Ecs + "Generated.Plumbing";
+        var overlay = $"var __e{n} = __p ? {P}.Overlay(in __chunk, {p.Term}, __i) : -1;";
+        string Overlaid(string outs) =>
+            $"{P}.Overlaid<{p.Type}>(in __chunk, {p.Term}, __i, {outs})";
         var find =
-            $"ref var __v{n} = ref {Ecs}Generated.Plumbing.Find(in __s{n}, __entities[__i], out var __slot{n});";
+            $"ref var __v{n} = ref __e{n} > 0 ? ref {Overlaid($"out __o{n}, out __slot{n}")} : ref {P}.Find(in __s{n}, __entities[__i], out __slot{n});";
+        var stored = $"__e{n} > 0 || (__e{n} < 0 && __slot{n} >= 0)";
+        if (p.Sparse)
+        {
+            var into = p.Kind is ParamKind.In or ParamKind.Ref ? guards : before;
+            into.Add(overlay);
+            into.Add($"var __o{n} = false;");
+            into.Add($"var __slot{n} = -1;");
+            into.Add(find);
+            into.Add($"var __h{n} = {stored};");
+        }
         switch (p.Kind)
         {
             case ParamKind.In when p.Sparse:
-                guards.Add(find);
-                guards.Add($"if (__slot{n} < 0) continue;");
+                guards.Add($"if (!__h{n}) continue;");
                 args.Add($"{value}__v{n}");
                 return;
             case ParamKind.In:
-                args.Add($"{value}__c{n}[__i]");
+                before.Add(overlay);
+                before.Add(
+                    $"ref var __v{n} = ref __e{n} > 0 ? ref {Overlaid("out _, out _")} : ref __c{n}[__i];"
+                );
+                args.Add($"{value}__v{n}");
                 return;
             case ParamKind.Ref when p.Sparse:
-                guards.Add(find);
-                guards.Add($"if (__slot{n} < 0) continue;");
-                before.Add(
-                    $"var __b{n} = {Ecs}Generated.Plumbing.Compares(in __s{n}) ? __v{n} : default;"
-                );
+                guards.Add($"if (!__h{n}) continue;");
+                before.Add($"var __b{n} = !__o{n} && {P}.Compares(in __s{n}) ? __v{n} : default;");
                 args.Add($"ref __v{n}");
                 after.Add(
-                    $"if ({Ecs}Generated.Plumbing.Compares(in __s{n})) {Ecs}Generated.Plumbing.Release(in __s{n}, __slot{n}, in __b{n});"
+                    $"if (!__o{n} && {P}.Compares(in __s{n})) {P}.Release(in __s{n}, __slot{n}, in __b{n});"
                 );
                 return;
             case ParamKind.Ref:
             {
                 var (gate, release) = Release(p, n);
+                before.Add(overlay);
+                before.Add($"var __o{n} = false;");
                 before.Add(
-                    $"ref var __v{n} = ref {Ecs}Generated.Plumbing.Unstamped(in __t{n}, __i);"
+                    $"ref var __v{n} = ref __e{n} > 0 ? ref {Overlaid($"out __o{n}, out _")} : ref {P}.Unstamped(in __t{n}, __i);"
                 );
-                before.Add($"var __b{n} = {Gate(gate, n)} ? __v{n} : default;");
+                before.Add($"var __b{n} = !__o{n} && {Gate(gate, n)} ? __v{n} : default;");
                 args.Add($"ref __v{n}");
-                after.Add($"if ({Gate(gate, n)}{release}");
+                after.Add($"if (!__o{n} && {Gate(gate, n)}{release}");
                 return;
             }
             case ParamKind.Optional when p.Sparse:
-                before.Add(find);
-                args.Add(
-                    $"__slot{n} >= 0 ? {Ecs}Generated.Plumbing.Optional<{p.Type}>(in __v{n}) : default"
-                );
+                args.Add($"__h{n} ? {P}.Optional<{p.Type}>(in __v{n}) : default");
                 return;
             case ParamKind.Optional:
+                before.Add(overlay);
                 args.Add(
-                    $"{Ecs}Generated.Plumbing.HasRow(in __chunk, {p.Term}, __i) ? {Ecs}Generated.Plumbing.Optional<{p.Type}>(in __c{n}[__i]) : default"
+                    $"__e{n} > 0 ? {P}.Optional<{p.Type}>(in {Overlaid("out _, out _")}) : __e{n} < 0 && {P}.HasRow(in __chunk, {p.Term}, __i) ? {P}.Optional<{p.Type}>(in __c{n}[__i]) : default"
                 );
                 return;
             case ParamKind.OptionalRef when p.Sparse:
-                before.Add(find);
                 before.Add(
-                    $"var __b{n} = __slot{n} >= 0 && {Ecs}Generated.Plumbing.Compares(in __s{n}) ? __v{n} : default;"
+                    $"var __b{n} = __h{n} && !__o{n} && {P}.Compares(in __s{n}) ? __v{n} : default;"
                 );
-                args.Add(
-                    $"__slot{n} >= 0 ? {Ecs}Generated.Plumbing.OptionalRef<{p.Type}>(ref __v{n}) : default"
-                );
+                args.Add($"__h{n} ? {P}.OptionalRef<{p.Type}>(ref __v{n}) : default");
                 after.Add(
-                    $"if (__slot{n} >= 0 && {Ecs}Generated.Plumbing.Compares(in __s{n})) {Ecs}Generated.Plumbing.Release(in __s{n}, __slot{n}, in __b{n});"
+                    $"if (__h{n} && !__o{n} && {P}.Compares(in __s{n})) {P}.Release(in __s{n}, __slot{n}, in __b{n});"
                 );
                 return;
             case ParamKind.OptionalRef:
             {
                 var (gate, release) = Release(p, n);
+                before.Add(overlay);
+                before.Add($"var __o{n} = false;");
                 before.Add(
-                    $"var __h{n} = {Ecs}Generated.Plumbing.HasRow(in __chunk, {p.Term}, __i);"
+                    $"var __h{n} = __e{n} > 0 || (__e{n} < 0 && {P}.HasRow(in __chunk, {p.Term}, __i));"
                 );
                 before.Add(
-                    $"ref var __v{n} = ref __h{n} ? ref {Ecs}Generated.Plumbing.Unstamped(in __t{n}, __i) : ref global::System.Runtime.CompilerServices.Unsafe.NullRef<{p.Type}>();"
+                    $"ref var __v{n} = ref __e{n} > 0 ? ref {Overlaid($"out __o{n}, out _")} : ref (__h{n} ? ref {P}.Unstamped(in __t{n}, __i) : ref global::System.Runtime.CompilerServices.Unsafe.NullRef<{p.Type}>());"
                 );
-                before.Add($"var __b{n} = __h{n} && {Gate(gate, n)} ? __v{n} : default;");
-                args.Add(
-                    $"__h{n} ? {Ecs}Generated.Plumbing.OptionalRef<{p.Type}>(ref __v{n}) : default"
+                before.Add(
+                    $"var __b{n} = __h{n} && !__o{n} && {Gate(gate, n)} ? __v{n} : default;"
                 );
-                after.Add($"if (__h{n} && {Gate(gate, n)}{release}");
+                args.Add($"__h{n} ? {P}.OptionalRef<{p.Type}>(ref __v{n}) : default");
+                after.Add($"if (__h{n} && !__o{n} && {Gate(gate, n)}{release}");
                 return;
             }
         }
     }
+
+    static bool IsValue(ParamModel p) =>
+        p.Kind is ParamKind.In or ParamKind.Ref or ParamKind.Optional or ParamKind.OptionalRef;
 
     static string Gate(string gate, int n) =>
         gate == "Tracks" ? $"__t{n}.Tracks" : $"{Ecs}Generated.Plumbing.Compares(in __t{n})";

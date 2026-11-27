@@ -34,6 +34,7 @@ public sealed class WorldScratch
         return new ScratchBuffer<T>(pool, array, minimumLength);
     }
 
+    [Effect(Effects.OwnerThread)]
     Stack<T[]> Pool<T>()
     {
         var index = ScratchSlot<T>.Index;

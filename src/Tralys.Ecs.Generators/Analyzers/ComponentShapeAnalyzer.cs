@@ -24,7 +24,11 @@ public sealed class ComponentShapeAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSymbolAction(Analyze, SymbolKind.NamedType);
+        context.RegisterCompilationStartAction(start =>
+        {
+            if (!Effects.IsRuntime(start.Compilation))
+                start.RegisterSymbolAction(Analyze, SymbolKind.NamedType);
+        });
     }
 
     static void Analyze(SymbolAnalysisContext context)
@@ -107,6 +111,8 @@ public sealed class ComponentShapeAnalyzer : DiagnosticAnalyzer
         string? invalid =
             enableable && sparse
                 ? "is enableable and sparse, but a sparse set has no per-row enable bit; drop [Enableable] or [Storage(StorageKind.Sparse)]"
+            : propagates && (rows || relation)
+                ? $"has [PropagateChanges], which only a component's writes raise; drop it from the {(rows ? "rows" : "relation")} type"
             : propagates && !directed
                 ? "has [PropagateChanges] with no direction; set ToAncestors, ToRelationSources or both"
             : tag && inherited && !enableable

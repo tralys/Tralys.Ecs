@@ -60,7 +60,7 @@ public sealed class TargetPolicyTests
     }
 
     [Test]
-    public async Task Finalising_refuses_a_cascade_onto_a_throw_target_and_releases_nothing()
+    public async Task Finalising_spares_a_root_whose_cascade_reaches_a_throw_target_and_reports_it_once()
     {
         using var world = TestWorlds.Create();
         var ship = world.Create();
@@ -69,53 +69,34 @@ public sealed class TargetPolicyTests
         world.Destroy(ship);
         world.Relate(world.Create(), crew, new Escorts());
 
-        await Assert.That(() => world.Playback()).Throws<InvalidOperationException>();
+        await Assert.That(() => world.Playback()).Throws<TargetPolicyException>();
+        world.Playback();
         await Assert
             .That((world.StateOf(ship), world.StateOf(crew)))
-            .IsEqualTo((LifecycleState.PendingDestroy, LifecycleState.Alive));
+            .IsEqualTo((LifecycleState.Alive, LifecycleState.Alive));
     }
 
-    sealed class Spares(Entity spared) : IDestroyObserver
+    sealed class Enlists(Entity ship, Entity crew) : IDestroyObserver
     {
-        public void OnDestroy(in ObserverContext context, Entity entity) =>
-            context.World.CancelDestroy(spared);
-    }
-
-    [Test]
-    public async Task A_source_spared_by_a_destroy_observer_keeps_its_target_alive()
-    {
-        using var world = TestWorlds.Create();
-        var root = world.Create();
-        var target = world.Create();
-        var source = world.Create();
-        world.SetParent(target, root);
-        world.Relate(source, target, new Escorts());
-        world.Destroy(source);
-        world.Destroy(root);
-        var spares = world.Observers.OnDestroy(new Spares(source));
-
-        await Assert.That(() => world.Playback()).Throws<InvalidOperationException>();
-        world.Observers.Remove(spares);
-        world.CancelDestroy(root);
-
-        await Assert.That(world.IsLive(target)).IsTrue();
+        public void OnDestroy(in ObserverContext context, Entity entity)
+        {
+            if (entity == ship)
+                context.World.Relate(crew, ship, new CrewOf());
+        }
     }
 
     [Test]
-    public async Task A_child_spared_by_a_destroy_observer_keeps_its_dying_parent_target_alive()
+    public async Task An_edge_a_destroy_observer_makes_onto_a_finalising_target_gets_the_target_s_policy()
     {
         using var world = TestWorlds.Create();
-        var root = world.Create();
-        var child = world.Create();
-        world.SetParent(child, root);
-        world.Relate(child, root, new Escorts());
-        world.Destroy(root);
-        var spares = world.Observers.OnDestroy(new Spares(child));
+        var ship = world.Create();
+        var crew = world.Create();
+        world.Observers.OnDestroy(new Enlists(ship, crew));
 
-        await Assert.That(() => world.Playback()).Throws<InvalidOperationException>();
-        world.Observers.Remove(spares);
+        world.Destroy(ship);
+        world.Playback();
 
-        await Assert.That(world.Exists(root)).IsTrue();
+        await Assert.That((world.Exists(ship), world.Exists(crew))).IsEqualTo((false, false));
     }
 
     [Test]
@@ -201,6 +182,34 @@ public sealed class TargetPolicyTests
 
         await Assert.That(() => DestroyInBatch(world, target)).Throws<TargetPolicyException>();
         await Assert.That(world.IsLive(target)).IsTrue();
+    }
+
+    static void ReparentAfterDestroy(World world, Entity root, Entity child)
+    {
+        using (world.Batch(child))
+        {
+            using (world.Batch(root))
+            {
+                world.Destroy(root);
+                world.SetParent(child, root);
+            }
+        }
+    }
+
+    [Test]
+    public async Task A_batch_s_destroy_waits_for_a_reparent_recorded_after_it_and_is_judged_with_it()
+    {
+        using var world = TestWorlds.Create();
+        var root = world.Create();
+        var escorted = world.Create();
+        world.Relate(world.Create(), escorted, new Escorts());
+
+        ReparentAfterDestroy(world, root, escorted);
+
+        await Assert.That(() => world.Playback()).Throws<TargetPolicyException>();
+        await Assert
+            .That((world.StateOf(root), world.Parent(escorted)))
+            .IsEqualTo((LifecycleState.Alive, root));
     }
 
     [Test]

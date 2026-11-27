@@ -11,6 +11,7 @@ internal readonly struct ComponentChange
     public readonly bool HearRemove;
     public readonly bool HearAdd;
     public readonly bool HearReplace;
+    public readonly bool StampAdded;
 
     ComponentChange(
         bool storedBefore,
@@ -32,6 +33,7 @@ internal readonly struct ComponentChange
         HearAdd = presentAfter && (!presentBefore || readded);
         HearReplace = replaced && presentBefore && presentAfter && !readded;
         LogReplaced = HearReplace;
+        StampAdded = LogAdded || HearAdd;
     }
 
     public static ComponentChange Of(
@@ -92,6 +94,22 @@ public sealed partial class World
             changes.Append(LogKind.Disabled, entity, type, reason);
         if (change.LogReplaced)
             changes.Append(LogKind.Replaced, entity, type, reason);
+    }
+
+    internal void Stamp(bool added, Archetype archetype, int tracked, int row)
+    {
+        if (added)
+            archetype.StampAdded(tracked, row, version);
+        else
+            archetype.Stamp(tracked, row, version);
+    }
+
+    internal void Stamp(bool added, SparseStorage storage, int at)
+    {
+        if (added)
+            storage.StampAdded(at, version);
+        else
+            storage.Stamp(at, version);
     }
 
     static ref byte Bytes(ref byte value) =>

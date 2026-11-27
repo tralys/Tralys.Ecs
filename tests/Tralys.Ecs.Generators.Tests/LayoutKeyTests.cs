@@ -49,6 +49,14 @@ public sealed class LayoutKeyTests
                 "[Component] public partial struct Probe { public Entity Who; }",
                 "[Component] public partial struct Probe { [Capture(CapturePolicy.Skip)] public Entity Who; }"
             ),
+            (
+                "[Component] public unsafe partial struct Probe { public fixed int Data[4]; }",
+                "[Component] public unsafe partial struct Probe { public fixed float Data[4]; }"
+            ),
+            (
+                "[Component] public partial struct Probe { public byte Flag; public long Value; }",
+                "[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1)] [Component] public partial struct Probe { public byte Flag; public long Value; }"
+            ),
         ];
 
         var unchanged = changes
@@ -69,5 +77,18 @@ public sealed class LayoutKeyTests
         );
 
         await Assert.That(diagnostics.Select(d => d.Id)).Contains("TECS0008");
+    }
+
+    [Test]
+    public async Task Spelling_out_the_default_layout_keeps_the_hash()
+    {
+        var implicitLayout = LayoutOf(
+            "[Component] public partial struct Probe { public byte Flag; public long Value; }"
+        );
+        var spelledOut = LayoutOf(
+            "[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] [Component] public partial struct Probe { public byte Flag; public long Value; }"
+        );
+
+        await Assert.That(spelledOut).IsEqualTo(implicitLayout);
     }
 }

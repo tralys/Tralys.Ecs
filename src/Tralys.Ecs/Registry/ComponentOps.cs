@@ -18,14 +18,21 @@ internal readonly unsafe struct ComponentOps(
     delegate* <int, ComponentDescriptor, RelationStore> createRelation
 )
 {
+    [Effect(Effects.None)]
     public readonly delegate* <int, SparseStorage> CreateSparse = createSparse;
+
+    [Effect(Effects.None)]
     public readonly delegate* <int, ComponentDescriptor, RelationStore> CreateRelation =
         createRelation;
 
+    [Effect(Effects.None)]
     public readonly delegate* <int, void> Bind = bind;
+
+    [Effect(Effects.None)]
     public readonly delegate* <int> GetIndex = getIndex;
 
     // Always false for managed types: a shallow compare cannot see a mutation inside a referenced object.
+    [Effect(Effects.None)]
     public readonly delegate* <ref byte, ref byte, bool> ValuesEqual = equals;
 
     public static ComponentOps For<T>()

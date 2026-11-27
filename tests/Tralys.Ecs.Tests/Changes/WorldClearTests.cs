@@ -31,6 +31,11 @@ public sealed class WorldClearTests
     static bool DisposeAfterClear(World world, Entity entity)
     {
         var edit = world.Edit<Position>(entity);
+        return DisposeAfterClear(world, ref edit);
+    }
+
+    static bool DisposeAfterClear(World world, ref ComponentEdit<Position> edit)
+    {
         world.Clear();
         try
         {

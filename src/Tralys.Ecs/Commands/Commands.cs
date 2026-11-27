@@ -107,8 +107,9 @@ public readonly ref struct Commands
     {
         buffer.At(file, line);
         buffer.CheckLive(entity);
-        buffer.world.CheckComponent(buffer.world.registry.IndexOf<T>());
-        buffer.RecordSet(entity, value);
+        var type = buffer.world.registry.IndexOf<T>();
+        buffer.world.CheckComponent(type);
+        buffer.RecordSet(entity, type, value);
     }
 
     /// <summary>Removes the component as <see cref="World.Remove{T}"/> does, at the next playback.</summary>
@@ -237,8 +238,8 @@ public readonly ref struct Commands
             CommandKind.Retarget,
             source,
             buffer.world.registry.IndexOf<R>(),
-            payload: buffer.Retarget(oldTarget),
-            other: newTarget
+            other: newTarget,
+            oldTarget: oldTarget
         );
     }
 

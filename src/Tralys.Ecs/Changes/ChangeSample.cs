@@ -2,27 +2,46 @@ using System.Diagnostics;
 
 namespace Tralys.Ecs;
 
+/// <summary>Where a <see cref="ChangeSample"/>'s window ends, and in which life of the world it was taken: pass it to
+/// <see cref="ChangeTracking.Commit"/> to consume the sample.</summary>
+public readonly struct ChangeWindow
+{
+    internal ChangeWindow(ulong epoch, ulong until)
+    {
+        Epoch = epoch;
+        Until = until;
+    }
+
+    internal ulong Epoch { get; }
+    internal ulong Until { get; }
+}
+
 /// <summary>One cursor sample: the values and rows stamped in the version window (<see cref="Since"/>, <see cref="Until"/>]. Adds of
 /// untracked types, removals and disables leave no stamp; a <see cref="ChangeWatch{TBits}"/> hears those.</summary>
 public readonly ref struct ChangeSample
 {
     readonly World world;
     readonly CursorOptions options;
+    readonly ulong epoch;
 
-    internal ChangeSample(World world, ulong since, ulong until, CursorOptions options)
+    internal ChangeSample(World world, ulong since, ulong until, CursorOptions options, ulong epoch)
     {
         this.world = world;
         Since = since;
         Until = until;
         this.options = options;
+        this.epoch = epoch;
     }
 
     /// <summary>The version the cursor last committed; the window excludes it. Zero after the world was reset to a snapshot, so the
     /// sample holds every stamped value.</summary>
     public ulong Since { get; }
 
-    /// <summary>The world version when the sample was taken; the window includes it. Pass it to <see cref="ChangeTracking.Commit"/> to consume the sample.</summary>
+    /// <summary>The world version when the sample was taken; the window includes it.</summary>
     public ulong Until { get; }
+
+    /// <summary>The window to pass to <see cref="ChangeTracking.Commit"/> to consume the sample.</summary>
+    public ChangeWindow Window => new(epoch, Until);
 
     /// <summary>The entities holding <typeparamref name="T"/> present whose value was stamped in the window, skipping an entity pending
     /// destroy or detached unless the cursor's options include it; removals and disables are not seen, and a value stamped again after

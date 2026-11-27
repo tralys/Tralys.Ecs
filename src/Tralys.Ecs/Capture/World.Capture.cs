@@ -9,7 +9,7 @@ public sealed partial class World
     /// a relation or an entity field; pending-destroy entities never enter;
     /// references to entities left outside become external. No roots give an empty image. The world must be settled.</summary>
     /// <exception cref="ArgumentException">A root is not alive, or the categories keep a component and drop one it requires.</exception>
-    [Effect(Effects.Settled)]
+    [Effect(Effects.Mutates | Effects.Settled)]
     public CaptureImage Capture(ReadOnlySpan<Entity> roots, in CaptureOptions options = default)
     {
         CheckSettled(nameof(Capture));
@@ -20,9 +20,17 @@ public sealed partial class World
     /// <see cref="LogKind.Extracted"/>; destroy and removal observers see <paramref name="reason"/>. Relations from outside into the subset
     /// are removed without applying their <see cref="TargetPolicy"/>: leaving a world is not dying in it. Children the subset leaves behind
     /// are first unparented as <see cref="SetParent(Entity, Entity, int, string, int)"/> would, so an index conflict that causes throws
-    /// before anything is removed.</summary>
+    /// before anything is removed; a child a destroy observer gives the subset is unparented the same way before the removal. A destroy
+    /// observer that throws does not stop the removal; its exception is reported in <see cref="ExtractResult.ObserverFailures"/>.</summary>
     /// <exception cref="ArgumentException">A root is not alive, or the categories keep a component and drop one it requires.</exception>
-    [Effect(Effects.Settled | Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.Settled
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     public ExtractResult Extract(
         ReadOnlySpan<Entity> roots,
         in CaptureOptions options = default,
@@ -35,8 +43,39 @@ public sealed partial class World
         CheckSettled(nameof(Extract));
         var image = new Capturer(this, options).Run(roots);
         var sources = image.Sources;
+        LeaveBehind(image, reason);
+        IndexConflictException? conflict;
+        var tag = attributed is { } log ? log.Current(currentSystem) : default;
+        BeginIndexBatch();
+        List<Exception>? errors;
+        try
+        {
+            // Not frozen: a write recorded onto a leaving entity would get a dying target's policy at playback, and leaving is not dying.
+            errors = NotifyDestroying(sources, reason, freeze: false, lastFirst: true);
+            LeaveBehind(image, reason);
+            attributed?.BeginReplay(tag);
+            for (var i = sources.Length - 1; i >= 0; i--)
+                Release(sources[i], reason, LogKind.Extracted);
+        }
+        finally
+        {
+            attributed?.EndReplay();
+            conflict = EndIndexBatch();
+        }
+        VerifyInvariants();
+        return new ExtractResult(
+            image,
+            conflict,
+            errors is null
+                ? null
+                : new AggregateException("Destroy observers threw while the subset left.", errors)
+        );
+    }
+
+    void LeaveBehind(CaptureImage image, LifecycleReason reason)
+    {
         var left = new List<Entity>();
-        foreach (var entity in sources)
+        foreach (var entity in image.Sources)
         {
             foreach (var child in hierarchy.ChildrenOf(entity))
             {
@@ -45,47 +84,7 @@ public sealed partial class World
             }
         }
         foreach (var child in left)
-            Reparent(child, default, -1, reason, guardTargets: false);
-        IndexConflictException? conflict;
-        var tag = attributed is { } log ? log.Current(currentSystem) : default;
-        BeginIndexBatch();
-        extracting = true;
-        try
-        {
-            foreach (var entity in sources)
-                allocator.Slots[entity.Index].DestroyReason = reason;
-            if (observers.destroys.Length > 0)
-            {
-                using var delivery = BeginDelivery();
-                var context = new ObserverContext(this, reason);
-                List<Exception>? errors = null;
-                for (var i = sources.Length - 1; i >= 0; i--)
-                {
-                    foreach (var (_, observer) in observers.destroys)
-                    {
-                        try
-                        {
-                            observer.OnDestroy(context, sources[i]);
-                        }
-                        catch (Exception error)
-                        {
-                            (errors ??= []).Add(error);
-                        }
-                    }
-                }
-                ObserverRegistry.Rethrow(errors);
-            }
-            attributed?.BeginReplay(tag);
-            for (var i = sources.Length - 1; i >= 0; i--)
-                Release(sources[i], reason);
-        }
-        finally
-        {
-            attributed?.EndReplay();
-            extracting = false;
-            conflict = EndIndexBatch();
-        }
-        return new ExtractResult(image, conflict);
+            Reparent(child, default, -1, reason);
     }
 }
 

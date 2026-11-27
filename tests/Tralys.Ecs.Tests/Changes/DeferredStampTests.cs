@@ -78,4 +78,55 @@ public sealed class DeferredStampTests
         await Assert.That(disabled).IsEqualTo(0UL);
         await Assert.That(world.Changes.VersionOf<Frozen>(entity)).IsGreaterThan(added);
     }
+
+    [Test]
+    public async Task A_tracked_write_recorded_then_played_back_inside_untracked_still_stamps()
+    {
+        using var world = TestWorlds.Create();
+        var entity = world.Create();
+
+        using (world.BeginDelivery())
+            world.Set(entity, new Position { X = 1 });
+        using (world.Untracked())
+            world.Playback();
+
+        await Assert.That(world.Changes.VersionOf<Position>(entity)).IsGreaterThan(0UL);
+    }
+
+    [Test]
+    public async Task An_edit_opened_untracked_and_released_tracked_stamps()
+    {
+        using var world = TestWorlds.Create();
+        var entity = world.Create();
+        world.Set(entity, new Position { X = 1 });
+        var before = world.Changes.VersionOf<Position>(entity);
+        world.AdvanceVersion();
+
+        var untracked = world.Untracked();
+        var edit = world.Edit<Position>(entity);
+        untracked.Dispose();
+        edit.Value.X = 2;
+        edit.Dispose();
+
+        await Assert.That(world.Changes.VersionOf<Position>(entity)).IsGreaterThan(before);
+    }
+
+    [Test]
+    public async Task A_component_with_an_overwrite_waiting_keeps_its_stored_version()
+    {
+        using var world = TestWorlds.Create();
+        var entity = world.Create();
+        world.Set(entity, new Burning { Ticks = 1 });
+        var stored = world.Changes.VersionOf<Burning>(entity);
+
+        ulong waiting;
+        using (world.BeginDelivery())
+        {
+            world.SetEnabled<Burning>(entity, false);
+            world.Set(entity, new Burning { Ticks = 2 });
+            waiting = world.Changes.VersionOf<Burning>(entity);
+        }
+
+        await Assert.That(waiting).IsEqualTo(stored);
+    }
 }

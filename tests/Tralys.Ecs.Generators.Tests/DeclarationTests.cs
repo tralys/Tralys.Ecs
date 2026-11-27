@@ -68,4 +68,19 @@ public sealed class DeclarationTests
             .GetAnalyzerDiagnosticsAsync();
         return diagnostics.Select(d => d.Id);
     }
+
+    [Test]
+    public async Task PropagateChanges_on_a_rows_or_relation_type_is_an_error()
+    {
+        var diagnostics = await Analyze(
+            """
+            namespace App;
+            [Tralys.Ecs.Rows, Tralys.Ecs.PropagateChanges(ToAncestors = true)] public partial struct Slot { [Tralys.Ecs.RowKey] public int Kind; }
+            [Tralys.Ecs.Relation, Tralys.Ecs.PropagateChanges(ToAncestors = true)] public partial struct Follows;
+            [Tralys.Ecs.Component, Tralys.Ecs.PropagateChanges(ToAncestors = true)] public partial struct Health { public int Value; }
+            """
+        );
+
+        await Assert.That(diagnostics.Count(id => id == "TECS0042")).IsEqualTo(2);
+    }
 }

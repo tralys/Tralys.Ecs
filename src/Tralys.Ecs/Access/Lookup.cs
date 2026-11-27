@@ -11,7 +11,7 @@ public readonly struct Lookup<T>(World world)
     public bool Has(Entity entity) => world.Has<T>(entity);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Get{T}(Entity)"/>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public ref readonly T Get(Entity entity) => ref world.Get<T>(entity);
 
     /// <inheritdoc cref="Tralys.Ecs.World.TryGet{T}(Entity, out T)"/>
@@ -19,7 +19,7 @@ public readonly struct Lookup<T>(World world)
     public bool TryGet(Entity entity, out T value) => world.TryGet(entity, out value);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Find{T}(Entity)"/>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public Optional<T> Find(Entity entity) => world.Find<T>(entity);
 }
 
@@ -35,7 +35,7 @@ public readonly struct RefLookup<T>(World world)
     public bool Has(Entity entity) => world.Has<T>(entity);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Get{T}(Entity)"/>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public ref readonly T Get(Entity entity) => ref world.Get<T>(entity);
 
     /// <inheritdoc cref="Tralys.Ecs.World.TryGet{T}(Entity, out T)"/>
@@ -43,7 +43,7 @@ public readonly struct RefLookup<T>(World world)
     public bool TryGet(Entity entity, out T value) => world.TryGet(entity, out value);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Find{T}(Entity)"/>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public Optional<T> Find(Entity entity) => world.Find<T>(entity);
 
     /// <inheritdoc cref="World.Replace{T}"/>

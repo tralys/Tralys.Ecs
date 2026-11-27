@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
-using System.Runtime.InteropServices;
 
 namespace Tralys.Ecs;
 
@@ -38,6 +37,9 @@ public sealed partial class World
     CommandRecord[] merged = new CommandRecord[64];
     CommandRecord[] batchRecords = new CommandRecord[16];
     int openBatches;
+
+    // A reset or clear abandons the open batches, so one disposed after it closes nothing.
+    int batchEpoch;
     RecordBlock[] blocks = new RecordBlock[16];
     readonly Dictionary<long, Entity> placeholders = [];
     uint rentals;
@@ -57,9 +59,13 @@ public sealed partial class World
     Entity[] batchClaims = [];
     readonly List<string> rejections = [];
     readonly List<Exception> commandFailures = [];
-    readonly HashSet<Entity> sparedLogged = [];
+    readonly List<Exception> observerFailures = [];
     bool playing;
     internal PlaybackStats lastPlayback;
+
+    // A destroy recorded in the batch being applied is judged once the batch has landed, and may yet be spared.
+    readonly List<Entity> destroyedRoots = [];
+    readonly HashSet<Entity> provisional = [];
 
     struct Superseded
     {
@@ -84,12 +90,15 @@ public sealed partial class World
         public Entity Entity;
         public bool Created;
         public bool Cancelled;
+
+        // Only an entity the batch created destroys in the fold; every other destroy and cancel replays in record order.
         public bool Destroy;
-        public bool Revive;
-        public bool Spared;
         public LifecycleReason DestroyReason;
         public sbyte Partition;
         public int PartitionEmission;
+
+        // The last record that moved the entity into or out of an index lane: its create or partition change.
+        public int LaneRecord;
         public int FirstState;
         public int Source;
         public int Target;
@@ -106,6 +115,10 @@ public sealed partial class World
         public bool EnableBefore;
         public bool Enable;
         public bool Tracked;
+
+        // A tracked record brought it into presence, so its stamp counts as an add; a later tracked write alone stamps a change.
+        public bool AddTracked;
+        public bool RemoveTracked;
         public bool Unchecked;
 
         // Present through a Set after being absent at some point in the batch; with Before, the component was re-added.
@@ -156,15 +169,23 @@ public sealed partial class World
         return buffer;
     }
 
-    internal void Submit(CommandBuffer buffer) => submitted.Add(buffer);
+    internal void Submit(CommandBuffer buffer)
+    {
+        if (buffer.IsEmpty)
+            ReturnBuffer(buffer);
+        else
+            submitted.Add(buffer);
+    }
 
     /// <summary>Whether a non-finalising <see cref="Playback"/> has work: recorded commands to apply or observer events to deliver.</summary>
     public bool PlaybackOwed => !stage.IsEmpty || submitted.Count > 0 || observers.HasPending;
 
     void DiscardCommands()
     {
+        openBatches = 0;
+        batchEpoch++;
         stage.Clear();
-        ForgetRecordedEdges();
+        ForgetWaiting();
         foreach (var buffer in submitted)
         {
             buffer.Clear();
@@ -181,24 +202,36 @@ public sealed partial class World
     }
 
     /// <summary>Applies every deferred command and delivers queued observer events, then, unless <paramref name="finalizeDestroys"/> is
-    /// false, finalises pending destroys; observer work feeds back into the same playback until quiet.</summary>
+    /// false, finalises pending destroys; observer work feeds back into the same playback until quiet. An observer that throws stops
+    /// nothing: the playback finishes, then throws.</summary>
     /// <exception cref="IndexConflictException">A unique index declared with <see cref="ConflictPolicy.Throw"/> saw a conflict; thrown
     /// once the playback has finished, so the world is consistent.</exception>
     /// <exception cref="CommandRejectedException">Buffered commands failed validation; they were dropped and the rest of the playback
     /// completed.</exception>
-    /// <exception cref="TargetPolicyException">Finalising would release the target of a <see cref="TargetPolicy.Throw"/> relation whose
-    /// source is live and not destroyed with it; nothing in that batch was released and its destroys stay pending.</exception>
+    /// <exception cref="TargetPolicyException">A recorded destroy, or a pending one being finalised, would release the target of a
+    /// <see cref="TargetPolicy.Throw"/> relation whose source outlives it, or a recorded write would leave such a source pointing at a dying
+    /// target; that destroy was spared, or that write dropped, and the rest of the playback completed.</exception>
     /// <exception cref="InvalidOperationException">A buffered command failed when applied, such as a parenting that would make a cycle; or
-    /// a query is iterating; or an observer called <see cref="Playback"/>. Nothing was played back in the last two cases.</exception>
-    /// <exception cref="AggregateException">More than one of the failures above, or an observer's exception together with any of
-    /// them.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// a query is iterating, an observer called <see cref="Playback"/>, or an <see cref="EntityBatch"/> is open. Nothing was played back in
+    /// the last three cases.</exception>
+    /// <exception cref="AggregateException">More than one of the failures above, or of the observers' exceptions.</exception>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     public void Playback(bool finalizeDestroys = true)
     {
         CheckWritable();
         if (playing)
             throw new InvalidOperationException(
                 "Playback cannot run inside another playback, such as from an observer."
+            );
+        if (openBatches > 0)
+            throw new InvalidOperationException(
+                "Playback cannot run while an EntityBatch is open; dispose the batch first."
             );
         if (iterationDepth > 0)
             throw new InvalidOperationException(
@@ -224,31 +257,54 @@ public sealed partial class World
             conflict = EndIndexBatch();
         }
         var dangling = failure is null && verifyReferences ? VerifyAfterPlayback() : null;
+        var broken = failure is null && verifyInvariants ? BrokenInvariant() : null;
+        lastPlayback = stats;
+        ThrowCollected(null, failure, conflict, dangling, broken);
+    }
+
+    void ThrowCollected(
+        string? closing,
+        Exception? failure,
+        IndexConflictException? conflict,
+        Exception? dangling,
+        Exception? broken
+    )
+    {
         if (
             failure is null
             && conflict is null
             && rejections.Count == 0
             && commandFailures.Count == 0
+            && observerFailures.Count == 0
             && dangling is null
+            && broken is null
         )
-        {
-            lastPlayback = stats;
             return;
-        }
-        lastPlayback = stats;
         var errors = new List<Exception>(4);
         if (failure is not null)
             errors.Add(failure);
         errors.AddRange(commandFailures);
         commandFailures.Clear();
+        errors.AddRange(observerFailures);
+        observerFailures.Clear();
         if (conflict is not null)
             errors.Add(conflict);
         if (rejections.Count > 0)
+        {
             errors.Add(new CommandRejectedException([.. rejections]));
+            rejections.Clear();
+        }
         if (dangling is not null)
             errors.Add(dangling);
+        if (broken is not null)
+            errors.Add(broken);
         if (errors.Count > 1)
-            throw new AggregateException("Playback failed in more than one way.", errors);
+            throw new AggregateException(
+                closing is null
+                    ? "Playback failed in more than one way."
+                    : $"Closing the {closing} failed in more than one way.",
+                errors
+            );
         ExceptionDispatchInfo.Throw(errors[0]);
     }
 
@@ -257,6 +313,7 @@ public sealed partial class World
         version++;
         rejections.Clear();
         commandFailures.Clear();
+        observerFailures.Clear();
         int applied = 0,
             folded = 0,
             stale = 0,
@@ -271,7 +328,7 @@ public sealed partial class World
             var progress = ApplyCommands(ref applied, ref folded, ref stale);
             int delivered;
             using (BeginDelivery())
-                delivered = observers.Deliver();
+                delivered = observers.Deliver(observerFailures);
             if (delivered > 0)
                 rounds++;
             var finalisedAny = false;
@@ -302,24 +359,15 @@ public sealed partial class World
         if (total == 0)
             return false;
         var records = Ordered(total);
-
         try
         {
             ResolvePlaceholders(records);
-            FoldAndApply(records, ref stale, ref folded);
-            ApplySide(records, ref stale);
-            GuardRecordedDestroys();
-        }
-        catch
-        {
-            AbandonBatch(records);
-            throw;
+            ApplyRecords(records, ref stale, ref folded);
         }
         finally
         {
-            sideRecords.Clear();
             stage.Clear();
-            ForgetRecordedEdges();
+            ForgetWaiting();
             overlay.Clear();
             foreach (var buffer in submitted)
             {
@@ -332,6 +380,40 @@ public sealed partial class World
         return true;
     }
 
+    void ApplyRecords(Span<CommandRecord> records, ref int stale, ref int folded)
+    {
+        // A serial record keeps the position of its call; a parallel command takes effect now, in playback order.
+        var now = indexClock;
+        indexClock += records.Length;
+        for (var r = 0; r < records.Length; r++)
+        {
+            if (buffersById[records[r].Buffer].parallel)
+                records[r].Position = now + r + 1;
+        }
+        try
+        {
+            FoldAndApply(records, ref stale, ref folded);
+            ApplySide(records, ref stale);
+            GuardRecordedDestroys();
+        }
+        catch
+        {
+            AbandonBatch(records);
+            throw;
+        }
+        finally
+        {
+            indexAt = 0;
+            sideRecords.Clear();
+            destroyedRoots.Clear();
+            provisional.Clear();
+            attributed?.EndReplay();
+        }
+    }
+
+    static long IndexPositionOf(Span<CommandRecord> records, int record) =>
+        record >= 0 ? records[record].Position : 0;
+
     void FoldAndApply(Span<CommandRecord> records, ref int stale, ref int folded)
     {
         partitionCascades.Clear();
@@ -340,91 +422,124 @@ public sealed partial class World
         Apply(records);
         FreeSuperseded();
         Emit(records);
-        CascadePartitions();
+        CascadePartitions(records);
     }
 
     readonly List<int> partitionCascades = [];
 
     // A moved entity's descendants follow it after the batch's own entries, as a cascade's consequences.
-    void CascadePartitions()
+    void CascadePartitions(Span<CommandRecord> records)
     {
         foreach (var e in partitionCascades)
         {
             ref readonly var emission = ref emissions[e];
+            indexAt = IndexPositionOf(records, folds[emission.Fold].LaneRecord);
             foreach (var child in hierarchy.ChildrenOf(folds[emission.Fold].Entity))
                 RefreshPartitions(child, emission.Reason);
         }
         partitionCascades.Clear();
     }
 
-    /// <summary>Opens a batch of changes to <paramref name="entity"/> that land in one archetype move when it is disposed. Inside an
-    /// observer, or while the entity already has changes waiting for playback, they wait for the next playback instead.</summary>
-    /// <exception cref="InvalidOperationException">The entity does not exist, or a serial query body is running.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <summary>Opens a batch of changes to <paramref name="entity"/> that land in one archetype move when it is disposed. Inside a query
+    /// walk they wait until the walk closes; inside an observer, or while the entity already has changes waiting for playback, they wait
+    /// for the next playback instead.</summary>
+    /// <exception cref="InvalidOperationException">The entity does not exist.</exception>
+    [Effect(Effects.Structural | Effects.Mutates)]
     public EntityBatch Batch(Entity entity)
     {
         CheckWritable();
-        CheckStructural();
+        Structural();
         ref var slot = ref Slot(entity);
-        if (Defers(slot))
-            return new EntityBatch(this, entity, applies: false);
-        slot.Pending = true;
+        if (RecordsStructure(slot))
+            return new EntityBatch(this, entity, -1);
+        MarkPending(ref slot);
         openBatches++;
-        return new EntityBatch(this, entity, applies: true);
+        return new EntityBatch(this, entity, batchEpoch);
     }
 
-    internal void CloseBatch(Entity entity)
+    internal void CloseBatch(Entity entity, int epoch)
     {
+        if (epoch != batchEpoch)
+            return;
         openBatches--;
         ref var slot = ref allocator.Current(entity);
         if (Unsafe.IsNullRef(ref slot) || !slot.Pending || iterationDepth > 0 || playing)
             return;
         CheckWritable();
+        var sides = false;
+        for (var i = 0; i < stage.count; i++)
+            sides |= stage.records[i].Entity != entity && Side(stage.records[i].Kind);
         var count = 0;
         for (var i = 0; i < stage.count; i++)
         {
             if (stage.records[i].Entity != entity)
                 continue;
-            // A reparent or an edge waits for the full playback, which applies side records.
-            if (stage.records[i].Kind >= CommandKind.Relate)
+            // The full playback applies these in record order with every entity's reparents and edges, which a destroy is judged by.
+            if (
+                Side(stage.records[i].Kind)
+                || (sides && stage.records[i].Kind == CommandKind.Destroy)
+            )
                 return;
             if (count == batchRecords.Length)
                 Array.Resize(ref batchRecords, count * 2);
             batchRecords[count++] = stage.records[i];
         }
+        ApplyOutsidePlayback(batchRecords.AsSpan(0, count), entity, "batch");
+
+        static bool Side(CommandKind kind) =>
+            kind is >= CommandKind.Relate or CommandKind.CancelDestroy;
+    }
+
+    // What the walk recorded applies as a playback applies it; its events wait for the next playback, and nothing is finalised.
+    void ApplyWalk(Exception? fault)
+    {
+        if (stage.IsEmpty)
+            return;
+        version++;
+        try
+        {
+            ApplyOutsidePlayback(stage.records.AsSpan(0, stage.count), default, "walk");
+        }
+        catch (Exception applying) when (fault is not null)
+        {
+            throw new AggregateException(
+                "The query body threw, and applying what it had recorded failed too.",
+                fault,
+                applying
+            );
+        }
+    }
+
+    void ApplyOutsidePlayback(Span<CommandRecord> records, Entity batch, string closing)
+    {
+        rejections.Clear();
+        commandFailures.Clear();
         IndexConflictException? conflict;
         BeginIndexBatch();
         try
         {
             int stale = 0,
                 folded = 0;
-            FoldAndApply(batchRecords.AsSpan(0, count), ref stale, ref folded);
-            ApplySide(batchRecords.AsSpan(0, count), ref stale);
-            GuardRecordedDestroys();
+            ApplyRecords(records, ref stale, ref folded);
         }
         finally
         {
-            sideRecords.Clear();
-            allocator.Slots[entity.Index].Pending = false;
-            stage.Drop(entity);
-            overlay.Drop(entity.Index);
+            if (batch.IsDefault)
+            {
+                stage.Clear();
+                ForgetWaiting();
+                overlay.Clear();
+            }
+            else
+            {
+                ClearPending(ref allocator.Slots[batch.Index]);
+                stage.Drop(batch);
+                overlay.Drop(batch.Index);
+            }
             conflict = EndIndexBatch();
         }
-        if (commandFailures.Count == 0)
-        {
-            if (conflict is not null)
-                throw conflict;
-            return;
-        }
-        var spared = commandFailures[0];
-        commandFailures.Clear();
-        if (conflict is not null)
-            throw new AggregateException(
-                "Closing the batch failed in more than one way.",
-                spared,
-                conflict
-            );
-        ExceptionDispatchInfo.Throw(spared);
+        VerifyInvariants();
+        ThrowCollected(closing, null, conflict, null, null);
     }
 
     // Records within one buffer are already in sequence order, so ordering whole runs orders every record.
@@ -502,20 +617,13 @@ public sealed partial class World
             return;
         foreach (ref var record in records)
         {
-            if (
-                record.Entity.IsPlaceholder
-                && placeholders.TryGetValue(Key(record.Entity), out var real)
-            )
-                record.Entity = real;
-            if (
-                record.Other.IsPlaceholder
-                && placeholders.TryGetValue(Key(record.Other), out var other)
-            )
-                record.Other = other;
-            if (
-                record.Kind is not (CommandKind.Set or CommandKind.Relate or CommandKind.UpsertRow)
-                || record.Payload < 0
-            )
+            for (var i = 0; i < record.Operands; i++)
+            {
+                ref var operand = ref record.Operand(i);
+                if (operand.IsPlaceholder && placeholders.TryGetValue(Key(operand), out var real))
+                    operand = real;
+            }
+            if (!CarriesValue(record.Kind) || record.Payload < 0)
                 continue;
             var offsets = registry[record.Type].EntityRefOffsets;
             if (offsets.IsEmpty)
@@ -538,6 +646,17 @@ public sealed partial class World
         static long Key(Entity placeholder) =>
             ((long)placeholder.PlaceholderRental << 32) | (uint)placeholder.PlaceholderLocal;
     }
+
+    // A RemoveRow payload is only the key, so it names entities but owns no buffers.
+    static bool CarriesValue(CommandKind kind) =>
+        kind
+            is CommandKind.Set
+                or CommandKind.Relate
+                or CommandKind.UpsertRow
+                or CommandKind.RemoveRow;
+
+    static bool OwnsValue(CommandKind kind) =>
+        kind is CommandKind.Set or CommandKind.Relate or CommandKind.UpsertRow;
 
     void Fold(Span<CommandRecord> records, ref int stale, ref int folded)
     {
@@ -563,12 +682,21 @@ public sealed partial class World
                 DropRecordedValue(in record);
                 continue;
             }
+            if (
+                record.Kind is CommandKind.Destroy or CommandKind.CancelDestroy
+                && !CreatedInBatch(record.Entity)
+            )
+            {
+                sideRecords.Add(r);
+                continue;
+            }
             var f = FoldFor(record.Entity);
             ref var fold = ref folds[f];
             switch (record.Kind)
             {
                 case CommandKind.Create:
                     fold.Created = true;
+                    fold.LaneRecord = r;
                     AddEmission(EmissionKind.Created, f, -1, default, r);
                     if (partitionsUsed)
                         fold.PartitionEmission = AddEmission(
@@ -580,34 +708,14 @@ public sealed partial class World
                         );
                     break;
                 case CommandKind.Destroy:
-                    fold.DestroyReason = record.Reason;
+                    if (!fold.Cancelled)
+                        fold.DestroyReason = record.Reason;
                     if (attributed is not null)
                         TrackDestroy(f, r);
-                    fold.Revive = false;
-                    if (fold.Created)
-                    {
-                        fold.Cancelled = true;
-                        folded++;
-                    }
-                    else
-                        fold.Destroy = true;
+                    fold.Cancelled = true;
                     break;
                 case CommandKind.CancelDestroy:
-                    if (
-                        !fold.Created
-                        && !OwnPendingAt(record.Entity)
-                        && UnderPendingAt(record.Entity)
-                    )
-                        sideRecords.Add(r);
-                    if (attributed is not null)
-                        TrackDestroy(f, r);
-                    if (fold.Cancelled)
-                    {
-                        fold.Cancelled = false;
-                        folded--;
-                    }
-                    fold.Destroy = false;
-                    fold.Revive = !fold.Created;
+                    fold.Cancelled = false;
                     fold.DestroyReason = default;
                     break;
                 case CommandKind.Detach:
@@ -615,6 +723,7 @@ public sealed partial class World
                 {
                     var detach = record.Kind == CommandKind.Detach;
                     fold.Partition = (sbyte)(detach ? 1 : 0);
+                    fold.LaneRecord = r;
                     if (fold.PartitionEmission >= 0)
                         emissions[fold.PartitionEmission].Dead = true;
                     fold.PartitionEmission = AddEmission(
@@ -631,12 +740,16 @@ public sealed partial class World
                     ref var state = ref State(f, record.Type, r);
                     var changes =
                         !state.Present || !state.Enable || Differs(fold.Entity, state, record);
+                    var tracked = !record.Untracked;
                     if (!state.Present)
                     {
                         state.Present = true;
                         state.Added = true;
                         state.Unchecked = buffersById[record.Buffer].parallel;
+                        state.AddTracked = tracked;
                     }
+                    else if (!state.Enable)
+                        state.AddTracked |= tracked;
                     state.Enable = true;
                     if (changes)
                         state.ChangedBy = r;
@@ -646,7 +759,8 @@ public sealed partial class World
                     state.Buffer = record.Buffer;
                     state.Payload = record.Payload;
                     state.Sequence = record.Sequence;
-                    state.Tracked |= !record.Untracked;
+                    // A tracked write of the value already there stamps nothing, as the immediate one does.
+                    state.Tracked |= (changes && tracked) || record.TrackedEdit;
                     break;
                 }
                 case CommandKind.Remove:
@@ -661,21 +775,15 @@ public sealed partial class World
                     }
                     else
                     {
-                        // Hooks see the stored value before the staged copy, which may share its buffers, is dropped.
                         var staged = state;
                         state.HasValue = false;
-                        if (WatchesRemoval(record.Type))
-                        {
-                            ref var departing = ref Departing(fold.Entity, state);
-                            foreach (var hook in coreHooks)
-                                hook.OnRemoving(this, fold.Entity, record.Type, ref departing);
-                            if (layout.OwnsBuffers[record.Type] && !Unsafe.IsNullRef(ref departing))
-                                FreeBuffers(record.Type, ref departing);
-                        }
+                        if (layout.OwnsBuffers[record.Type])
+                            Vacating(record.Type, ref FoldedValue(fold.Entity, state));
                         DropPayload(staged);
                     }
                     if (state.Before && state.RemovedBy < 0)
                         state.RemovedBy = r;
+                    state.RemoveTracked |= !record.Untracked;
                     state.ChangedBy = r;
                     state.Present = false;
                     state.HasValue = false;
@@ -690,14 +798,14 @@ public sealed partial class World
                     if (!state.Present)
                     {
                         if (enable)
-                            rejections.Add(
-                                $"SetEnabled<{registry[record.Type].Name}>(true) on {record.Entity}, which has no {registry[record.Type].Name}; add it with Set or Add."
-                            );
+                            rejections.Add(NoneToEnable(record.Type, record.Entity));
                         break;
                     }
                     if (state.Enable == enable)
                         break;
                     state.Tracked |= !record.Untracked;
+                    if (enable)
+                        state.AddTracked |= !record.Untracked;
                     state.Enable = enable;
                     state.ChangedBy = r;
                     break;
@@ -711,34 +819,14 @@ public sealed partial class World
             {
                 fold.Cancelled = false;
                 fold.Destroy = true;
-                folded--;
             }
+            if (fold.Cancelled)
+                folded++;
         }
     }
 
-    // As of the records folded so far, so a recorded cancel decides as World.CancelDestroy would have at that point.
-    bool OwnPendingAt(Entity entity)
-    {
-        if (foldOf[entity.Index] is var mark and > 0)
-        {
-            ref readonly var fold = ref folds[mark - 1];
-            if (fold.Destroy)
-                return true;
-            if (fold.Revive)
-                return false;
-        }
-        return allocator.Slots[entity.Index].State == LifecycleState.PendingDestroy;
-    }
-
-    bool UnderPendingAt(Entity entity)
-    {
-        for (var up = hierarchy.ParentOf(entity); !up.IsDefault; up = hierarchy.ParentOf(up))
-        {
-            if (OwnPendingAt(up))
-                return true;
-        }
-        return false;
-    }
+    bool CreatedInBatch(Entity entity) =>
+        foldOf[entity.Index] is var mark and > 0 && folds[mark - 1].Created;
 
     int FoldFor(Entity entity)
     {
@@ -753,6 +841,7 @@ public sealed partial class World
             Entity = entity,
             Partition = -1,
             PartitionEmission = -1,
+            LaneRecord = -1,
             FirstState = -1,
             Source = slot.Archetype?.Id ?? -1,
             Target = -1,
@@ -810,7 +899,7 @@ public sealed partial class World
         emissions[created.Emission].State = stateCount;
         if (before && enableBefore && observers.For(type) is { WantsRemove: true })
         {
-            ref var stored = ref Departing(fold.Entity, created);
+            ref var stored = ref FoldedValue(fold.Entity, created);
             created.Old = observers.CaptureDeparting(
                 type,
                 ref Unsafe.IsNullRef(ref stored) ? ref ZeroBytes.Value : ref stored
@@ -820,38 +909,40 @@ public sealed partial class World
         return ref states[stateCount++];
     }
 
-    bool Differs(Entity entity, in TypeState state, in CommandRecord record)
+    unsafe bool Differs(Entity entity, in TypeState state, in CommandRecord record)
     {
         if (record.Payload < 0)
             return false;
-        var descriptor = registry[record.Type];
-        ref var current = ref Departing(entity, state);
-        if (descriptor.IsManaged || Unsafe.IsNullRef(ref current))
-            return true;
-        ref var next = ref buffersById[record.Buffer].Payload(record.Type).RowRef(record.Payload);
-        return !MemoryMarshal
-            .CreateReadOnlySpan(ref current, descriptor.Size)
-            .SequenceEqual(MemoryMarshal.CreateReadOnlySpan(ref next, descriptor.Size));
+        ref var current = ref FoldedValue(entity, state);
+        return Unsafe.IsNullRef(ref current)
+            || !registry[record.Type]
+                .Ops.ValuesEqual(
+                    ref current,
+                    ref buffersById[record.Buffer].Payload(record.Type).RowRef(record.Payload)
+                );
     }
 
-    ref byte Departing(Entity entity, in TypeState state)
+    ref byte FoldedValue(Entity entity, in TypeState state) =>
+        ref state.HasValue
+            ? ref buffersById[state.Buffer].Payload(state.Type).RowRef(state.Payload)
+            : ref StoredValue(entity, state.Type);
+
+    ref byte StoredValue(Entity entity, int type)
     {
-        if (state.HasValue)
-            return ref buffersById[state.Buffer].Payload(state.Type).RowRef(state.Payload);
         ref var slot = ref allocator.Slots[entity.Index];
-        switch (layout.Class[state.Type])
+        switch (layout.Class[type])
         {
             case StorageClass.Column:
             {
                 var archetype = slot.Placed;
-                var column = archetype.ColumnSlot(state.Type);
+                var column = archetype.ColumnSlot(type);
                 return ref column >= 0
                     ? ref archetype.RowRef(column, slot.Row)
                     : ref Unsafe.NullRef<byte>();
             }
             case StorageClass.Sparse:
             {
-                var storage = StoredSparse(state.Type);
+                var storage = StoredSparse(type);
                 return ref storage.RowRef(storage.SlotOf(entity.Index));
             }
         }
@@ -882,37 +973,49 @@ public sealed partial class World
             pending = IsUnchecked(states[s]);
         if (!pending)
             return;
+        RejectUnmetRequirements();
+        if (layout.SingletonCount > 0 && RejectRivalClaims())
+            RejectUnmetRequirements();
+    }
 
-        if (layout.SingletonCount > 0)
+    // Requirements settle first: a claim by an add that is then rejected would turn away a rival that keeps its add.
+    bool RejectRivalClaims()
+    {
+        if (batchClaims.Length < layout.SingletonCount)
+            batchClaims = new Entity[layout.SingletonCount];
+        else
+            Array.Clear(batchClaims);
+        var rejected = false;
+        for (var f = 0; f < foldCount; f++)
         {
-            if (batchClaims.Length < layout.SingletonCount)
-                batchClaims = new Entity[layout.SingletonCount];
-            else
-                Array.Clear(batchClaims);
-            for (var f = 0; f < foldCount; f++)
+            if (folds[f].Cancelled)
+                continue;
+            var entity = folds[f].Entity;
+            for (var s = folds[f].FirstState; s >= 0; s = states[s].Next)
             {
-                if (folds[f].Cancelled)
+                ref var state = ref states[s];
+                var singleton = layout.SingletonSlot[state.Type];
+                if (singleton < 0 || !IsUnchecked(state))
                     continue;
-                var entity = folds[f].Entity;
-                for (var s = folds[f].FirstState; s >= 0; s = states[s].Next)
+                var holder = SingletonRival(entity, singleton);
+                if (!holder.IsDefault && ReleasedInBatch(holder, state.Type))
+                    holder = default;
+                if (holder.IsDefault)
+                    holder = batchClaims[singleton];
+                if (holder.IsDefault || holder == entity)
+                    batchClaims[singleton] = entity;
+                else
                 {
-                    ref var state = ref states[s];
-                    var singleton = layout.SingletonSlot[state.Type];
-                    if (singleton < 0 || !IsUnchecked(state))
-                        continue;
-                    var holder = SingletonRival(entity, singleton);
-                    if (!holder.IsDefault && ReleasedInBatch(holder, state.Type))
-                        holder = default;
-                    if (holder.IsDefault)
-                        holder = batchClaims[singleton];
-                    if (holder.IsDefault || holder == entity)
-                        batchClaims[singleton] = entity;
-                    else
-                        Reject(ref state, SingletonConflict(state.Type, holder, entity.ToString()));
+                    Reject(ref state, SingletonConflict(state.Type, holder, entity.ToString()));
+                    rejected = true;
                 }
             }
         }
+        return rejected;
+    }
 
+    void RejectUnmetRequirements()
+    {
         bool rejected;
         do
         {
@@ -1032,32 +1135,17 @@ public sealed partial class World
         emissionRecords[emissionCount] = record;
     }
 
-    // A cancelled create bypasses finalisation, which destroys children and enforces Throw.
+    // A cancelled create skips finalisation and the policies it applies, so any side record naming the entity keeps the create.
     bool CreateCancellable(Entity entity, Span<CommandRecord> records)
     {
-        if (hierarchy.HasChildren(entity))
-            return false;
         foreach (var r in sideRecords)
         {
-            ref readonly var record = ref records[r];
-            if (
-                record.Other == entity
-                && (
-                    record.Kind == CommandKind.SetParent
-                    || (
-                        record.Kind is CommandKind.Relate or CommandKind.Retarget
-                        && ThrowGuarded(record.Type)
-                    )
-                )
-            )
-                return false;
-        }
-        if (!guardsTargets)
-            return true;
-        foreach (var store in relations)
-        {
-            if (store is { Policy: TargetPolicy.Throw } && !store.SourcesOf(entity).IsEmpty)
-                return false;
+            ref var record = ref records[r];
+            for (var i = 0; i < record.Operands; i++)
+            {
+                if (record.Operand(i) == entity)
+                    return false;
+            }
         }
         return true;
     }
@@ -1069,14 +1157,11 @@ public sealed partial class World
             if (record.Entity.IsPlaceholder || !allocator.IsCurrent(record.Entity))
                 continue;
             ref var slot = ref allocator.Slots[record.Entity.Index];
-            slot.Pending = false;
+            ClearPending(ref slot);
             if (slot.State == LifecycleState.Reserved)
-                Release(record.Entity, default);
+                Release(record.Entity, default, LogKind.Destroyed);
         }
     }
-
-    bool ThrowGuarded(int type) =>
-        guardsTargets && registry[type].OnTargetDestroyed == TargetPolicy.Throw;
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     void TrackDestroy(int fold, int record)
@@ -1119,7 +1204,7 @@ public sealed partial class World
                 }
                 if (log is not null)
                     log.BeginReplay(TagOf(records[destroyRecords[f]]));
-                Release(entity, fold.DestroyReason);
+                Release(entity, fold.DestroyReason, LogKind.Destroyed);
                 log?.EndReplay();
                 continue;
             }
@@ -1132,13 +1217,14 @@ public sealed partial class World
             }
             else if (fold.Source != fold.Target)
                 MoveTo(entity, ref slot, target);
-            var archetype = slot.Placed;
             if (fold.Partition >= 0)
                 slot.DetachedSelf = fold.Partition == 1;
             if (fold.PartitionEmission >= 0)
             {
                 var moved = slot.Detached != wasDetached;
-                emissions[fold.PartitionEmission].Dead = !moved;
+                ref var emission = ref emissions[fold.PartitionEmission];
+                emission.Dead = !moved;
+                emission.Kind = slot.Detached ? EmissionKind.Detached : EmissionKind.Reattached;
                 if (moved)
                     hierarchy.RaiseAncestors(entity, version);
                 if (moved && hierarchy.HasChildren(entity))
@@ -1146,82 +1232,65 @@ public sealed partial class World
             }
 
             for (var s = fold.FirstState; s >= 0; s = states[s].Next)
-                ApplyState(entity, ref slot, archetype, ref states[s]);
+            {
+                ref var state = ref states[s];
+                ApplyState(
+                    entity,
+                    ref slot,
+                    ref state,
+                    ref state.HasValue
+                        ? ref buffersById[state.Buffer].Payload(state.Type).RowRef(state.Payload)
+                        : ref Unsafe.NullRef<byte>()
+                );
+            }
 
-            if (fold.Destroy && slot.State == LifecycleState.Alive)
+            if (fold.Destroy)
             {
-                MarkPendingDestroy(entity, ref slot, fold.DestroyReason);
-                destroyedRoots.Add(entity);
-                log?.TagDestroy(entity.Index, TagOf(records[destroyRecords[f]]));
-                if (hierarchy.HasChildren(entity))
-                    RefreshChildren(entity);
+                if (log is not null)
+                    log.BeginReplay(TagOf(records[destroyRecords[f]]));
+                MarkDestroyed(entity, ref slot, fold.DestroyReason, recorded: true);
+                log?.EndReplay();
             }
-            else if (fold.Revive && slot.State == LifecycleState.PendingDestroy)
-            {
-                slot.State = LifecycleState.Alive;
-                slot.DestroyReason = default;
-                archetype.SetPendingDestroy(slot.Row, false);
-                hierarchy.RaiseAncestors(entity, version);
-                log?.TagDestroy(entity.Index, default);
-                if (hierarchy.HasChildren(entity))
-                    RefreshChildren(entity);
-                fold.Spared = true;
-            }
-            slot.Pending = false;
+            ClearPending(ref slot);
         }
-        LogSparedFolds(records);
         if (!hasIndexes)
             return;
         // Folds are in record order and the loop above is not; the order picks which entity a shared unique key goes to.
         for (var f = 0; f < foldCount; f++)
         {
             if (!folds[f].Cancelled)
-                RefreshFoldIndexes(in folds[f]);
+                RefreshFoldIndexes(records, in folds[f]);
         }
-    }
-
-    // A spared root's subtree is only final once every fold has applied: a descendant destroyed in the same batch must not log as spared.
-    void LogSparedFolds(Span<CommandRecord> records)
-    {
-        if (!changes.Wants(-1, LogKind.DestroyCancelled))
-            return;
-        var log = attributed;
-        for (var f = 0; f < foldCount; f++)
-        {
-            if (!folds[f].Spared)
-                continue;
-            if (log is not null)
-                log.BeginReplay(TagOf(records[destroyRecords[f]]));
-            LogSpared(folds[f].Entity, sparedLogged);
-            log?.EndReplay();
-        }
-        sparedLogged.Clear();
     }
 
     // Runs once the slot is no longer pending, so the index reads stored values rather than the overlay.
-    void RefreshFoldIndexes(in EntityFold fold)
+    void RefreshFoldIndexes(Span<CommandRecord> records, in EntityFold fold)
     {
-        if (fold.Created || fold.Destroy || fold.Revive || fold.Partition >= 0)
-        {
-            RefreshAllIndexes(fold.Entity);
-            return;
-        }
+        var moved =
+            fold.Created
+            || fold.Destroy
+            || (fold.PartitionEmission >= 0 && !emissions[fold.PartitionEmission].Dead);
+        var lane = moved ? fold.LaneRecord : -1;
         for (var s = fold.FirstState; s >= 0; s = states[s].Next)
+        {
+            indexAt = Math.Max(
+                IndexPositionOf(records, states[s].ChangedBy),
+                IndexPositionOf(records, lane)
+            );
             RefreshIndexes(fold.Entity, states[s].Type);
+        }
+        if (moved || fold.Partition >= 0)
+        {
+            indexAt = IndexPositionOf(records, lane);
+            RefreshAllIndexes(fold.Entity);
+        }
     }
 
     Archetype TargetOf(ref EntityFold fold)
     {
         var source = fold.Source >= 0 ? archetypes[fold.Source] : root;
-        var detached = source.Detached;
-        if (fold.Partition >= 0 || (fold.Created && partitionsUsed))
-        {
-            var self =
-                fold.Partition >= 0
-                    ? fold.Partition == 1
-                    : allocator.Slots[fold.Entity.Index].DetachedSelf;
-            detached = self || InheritsDetach(fold.Entity);
-        }
+        var detached =
+            fold.Partition >= 0 || fold.Created ? FinalDetached(fold.Entity) : source.Detached;
         var moved = -1;
         var moves = 0;
         for (var s = fold.FirstState; s >= 0; s = states[s].Next)
@@ -1254,163 +1323,212 @@ public sealed partial class World
         return ArchetypeFor(words, detached);
     }
 
+    // From the batch's final flags, so a fold lands where it ends up whichever of its ancestors' folds applies first.
+    bool FinalDetached(Entity entity)
+    {
+        for (var node = entity; !node.IsDefault; node = hierarchy.ParentOf(node))
+        {
+            var mark = foldOf[node.Index];
+            var self =
+                mark > 0 && folds[mark - 1].Entity == node && folds[mark - 1].Partition >= 0
+                    ? folds[mark - 1].Partition == 1
+                    : allocator.Slots[node.Index].DetachedSelf;
+            if (self)
+                return true;
+        }
+        return false;
+    }
+
     bool MovesArchetype(in TypeState state) =>
         state.Present != state.Before
         && layout.Class[state.Type] is StorageClass.Column or StorageClass.SignatureTag;
 
-    unsafe void ApplyState(
-        Entity entity,
-        ref EntitySlot slot,
-        Archetype archetype,
-        ref TypeState state
-    )
+    // Both routes apply a component's net change here; the caller moves the archetype and reports.
+    ref byte ApplyState(Entity entity, ref EntitySlot slot, ref TypeState state, ref byte incoming)
     {
         var type = state.Type;
-        var row = slot.Row;
-        var added = state.Added;
-        var track = Tracking && state.Tracked;
         if (!state.Present)
+        {
             ReleaseSingleton(entity, type);
-        else if (added)
+            if (state.Before && state.RemoveTracked)
+                PropagateRemoval(entity, type);
+            switch (layout.Class[type])
+            {
+                case StorageClass.Sparse:
+                    if (SparseFor(type).Remove(entity.Index))
+                        slot.SparseCount--;
+                    break;
+                case StorageClass.SparseTag:
+                    SetSparseTag(entity, ref slot, type, false);
+                    break;
+            }
+            return ref Unsafe.NullRef<byte>();
+        }
+        if (state.Added)
             HoldSingleton(entity, type);
         switch (layout.Class[type])
         {
-            case StorageClass.Column:
-            case StorageClass.SignatureTag:
+            case StorageClass.Sparse when !state.Before:
             {
-                if (!state.Present)
-                    return;
-                ref readonly var typeSlot = ref archetype.Map.SlotAt(archetype.Map.IndexOf(type));
-                var tracked = track ? typeSlot.Tracked : -1;
-                if (typeSlot.Column >= 0 && state.HasValue)
-                {
-                    var payloads = buffersById[state.Buffer].Payload(type);
-                    var column = archetype.Columns[typeSlot.Column];
-                    if (!added && layout.OwnsBuffers[type])
-                        FreeReplacedBuffers(
-                            type,
-                            ref archetype.RowRef(typeSlot.Column, row),
-                            ref payloads.RowRef(state.Payload)
-                        );
-                    bool changed;
-                    if (!added && layout.ReplaceOnly[type])
-                    {
-                        ref var incoming = ref payloads.RowRef(state.Payload);
-                        ref var cell = ref archetype.RowRef(typeSlot.Column, row);
-                        changed = !registry[type].Ops.ValuesEqual(ref cell, ref incoming);
-                        if (changed)
-                        {
-                            Replaced(ref state, ref cell, ref incoming);
-                            payloads.CopyToColumn(state.Payload, column, row);
-                        }
-                    }
-                    else
-                        changed = payloads.WriteToColumn(state.Payload, column, row, !added);
-                    if (changed && tracked >= 0 && !added)
-                        archetype.Stamp(tracked, row, version);
-                }
-                if (added && tracked >= 0)
-                    archetype.StampAdded(tracked, row, version);
-                var enable = typeSlot.Enable;
-                if (enable >= 0 && archetype.IsEnabled(enable, row) != state.Enable)
-                {
-                    archetype.SetEnabled(enable, row, state.Enable);
-                    if (tracked >= 0)
-                        archetype.Stamp(tracked, row, version);
-                    if (layout.InheritedSlot[type] > 0 && hierarchy.HasChildren(entity))
-                        RefreshChildren(entity);
-                }
-                return;
-            }
-            case StorageClass.Sparse:
-            {
-                var descriptor = registry[type];
+                if (Unsafe.IsNullRef(ref incoming))
+                    return ref Unsafe.NullRef<byte>();
                 var storage = SparseFor(type);
-                if (!state.Present)
-                {
-                    if (storage.Remove(entity.Index))
-                        slot.SparseCount--;
-                    return;
-                }
-                if (!state.HasValue)
-                    return;
-                ref var incoming = ref buffersById[state.Buffer]
-                    .Payload(type)
-                    .RowRef(state.Payload);
-                var stamp = track && descriptor.IsStamped;
-                int at;
-                if (!state.Before)
-                {
-                    at = storage.AddFrom(entity, ref incoming);
-                    slot.SparseCount++;
-                }
-                else
-                {
-                    at = storage.SlotOf(entity.Index);
-                    if (!added)
-                    {
-                        ref var current = ref storage.RowRef(at);
-                        if (descriptor.Ops.ValuesEqual(ref current, ref incoming))
-                            return;
-                        if (layout.ReplaceOnly[type])
-                            Replaced(ref state, ref current, ref incoming);
-                        if (layout.OwnsBuffers[type])
-                            FreeReplacedBuffers(type, ref current, ref incoming);
-                        storage.WriteFrom(at, ref incoming);
-                        if (stamp)
-                            storage.Stamp(at, version);
-                        return;
-                    }
-                    storage.WriteFrom(at, ref incoming);
-                }
-                if (stamp)
-                    storage.StampAdded(at, version);
-                return;
+                var at = storage.AddFrom(entity, ref incoming);
+                slot.SparseCount++;
+                if (state.Tracked && storage.Stamped)
+                    Stamp(StampsAdded(in state), storage, at);
+                return ref storage.RowRef(at);
             }
             case StorageClass.SparseTag:
-                if (
-                    (sparseTags[layout.SparseTagSlot[type]] ??= new SparseTagStorage(type)).Set(
-                        entity.Index,
-                        state.Present
-                    )
-                )
-                    slot.SparseCount = (ushort)(slot.SparseCount + (state.Present ? 1 : -1));
-                return;
+                SetSparseTag(entity, ref slot, type, true);
+                return ref Unsafe.NullRef<byte>();
         }
+        return ref ApplyValue(entity, ref slot, ref state, ref incoming);
     }
 
-    readonly List<Entity> destroyedRoots = [];
+    void SetSparseTag(Entity entity, ref EntitySlot slot, int type, bool present)
+    {
+        if (
+            (sparseTags[layout.SparseTagSlot[type]] ??= new SparseTagStorage(type)).Set(
+                entity.Index,
+                present
+            )
+        )
+            slot.SparseCount = (ushort)(slot.SparseCount + (present ? 1 : -1));
+    }
 
-    // A recorded destroy is guarded once the batch's reparents have landed, against the state its call would have seen. One that
-    // breaks a Throw relation is spared and reported, so it never fails a later finalisation.
+    // A stored component's value write and enable flip, which move nothing.
+    ref byte ApplyValue(Entity entity, ref EntitySlot slot, ref TypeState state, ref byte incoming)
+    {
+        var type = state.Type;
+        if (layout.Class[type] == StorageClass.Sparse)
+        {
+            var storage = StoredSparse(type);
+            var at = storage.SlotOf(entity.Index);
+            ref var current = ref storage.RowRef(at);
+            if (!Unsafe.IsNullRef(ref incoming) && Overwrites(ref state, ref current, ref incoming))
+            {
+                storage.WriteFrom(at, ref incoming);
+                if (state.Tracked && storage.Stamped)
+                    Stamp(StampsAdded(in state), storage, at);
+            }
+            return ref current;
+        }
+        var archetype = slot.Placed;
+        var row = slot.Row;
+        ref readonly var typeSlot = ref archetype.Map.SlotAt(archetype.Map.IndexOf(type));
+        ref var cell = ref typeSlot.Column >= 0
+            ? ref archetype.RowRef(typeSlot.Column, row)
+            : ref Unsafe.NullRef<byte>();
+        var written = state.Added;
+        if (
+            !Unsafe.IsNullRef(ref cell)
+            && !Unsafe.IsNullRef(ref incoming)
+            && Overwrites(ref state, ref cell, ref incoming)
+        )
+        {
+            registry[type].Column.Store(archetype.Columns[typeSlot.Column], row, ref incoming);
+            written = true;
+        }
+        var enable = typeSlot.Enable;
+        var flips = enable >= 0 && archetype.IsEnabled(enable, row) != state.Enable;
+        if (flips)
+            archetype.SetEnabled(enable, row, state.Enable);
+        if (state.Tracked && typeSlot.Tracked >= 0 && (written || flips))
+            Stamp(StampsAdded(in state), archetype, typeSlot.Tracked, row);
+        if (flips && layout.InheritedSlot[type] > 0 && hierarchy.HasChildren(entity))
+            RefreshChildren(entity);
+        return ref cell;
+    }
+
+    // Equal values write nothing; an overwrite captures a replace-only change and frees the buffers it drops before the write.
+    unsafe bool Overwrites(ref TypeState state, ref byte cell, ref byte incoming)
+    {
+        if (state.Added)
+            return true;
+        var type = state.Type;
+        if (registry[type].Ops.ValuesEqual(ref cell, ref incoming))
+            return false;
+        if (layout.ReplaceOnly[type])
+            Replaced(ref state, ref cell, ref incoming);
+        if (layout.OwnsBuffers[type])
+            FreeReplacedBuffers(type, ref cell, ref incoming);
+        return true;
+    }
+
+    static TypeState Adding(int type, bool tracked) =>
+        new()
+        {
+            Type = type,
+            Present = true,
+            Enable = true,
+            Added = true,
+            Tracked = tracked,
+            AddTracked = tracked,
+            ReplacedOld = -1,
+            ReplacedNew = -1,
+        };
+
+    static TypeState Kept(int type, bool enabledBefore, bool enabled, bool tracked) =>
+        new()
+        {
+            Type = type,
+            Before = true,
+            EnableBefore = enabledBefore,
+            Present = true,
+            Enable = enabled,
+            Tracked = tracked,
+            AddTracked = tracked,
+            ReplacedOld = -1,
+            ReplacedNew = -1,
+        };
+
+    static TypeState Removing(int type, bool enabledBefore, bool tracked) =>
+        new()
+        {
+            Type = type,
+            Before = true,
+            EnableBefore = enabledBefore,
+            RemoveTracked = tracked,
+            ReplacedOld = -1,
+            ReplacedNew = -1,
+        };
+
+    void Report(in TypeState state, Entity entity, ref byte old, ref byte value)
+    {
+        var change = ChangeOf(in state);
+        Log(change, entity, state.Type, default);
+        if (change.HearRemove)
+            observers.QueueRemove(entity, state.Type, ref Bytes(ref old), default);
+        if (change.HearAdd)
+            observers.QueueAdd(entity, state.Type, ref Bytes(ref value), default);
+        if (change.HearReplace)
+            observers.QueueCapturedReplace(
+                entity,
+                state.Type,
+                state.ReplacedOld,
+                state.ReplacedNew
+            );
+    }
+
+    static bool StampsAdded(in TypeState state) =>
+        state.AddTracked && ChangeOf(in state).StampAdded;
+
+    static ComponentChange ChangeOf(in TypeState state) =>
+        ComponentChange.Of(
+            state.Before,
+            state.EnableBefore,
+            state.Present,
+            state.Enable,
+            readded: state.Before && state.Added,
+            replaced: state.Replaced
+        );
+
+    // A recorded destroy is guarded once the batch's reparents have landed; one that breaks a Throw relation is spared and reported.
     void GuardRecordedDestroys()
     {
-        if (guardsTargets && AnyThrowEdge())
-        {
-            bool spared;
-            // A spare revives a source that an earlier root's check counted as dying.
-            do
-            {
-                spared = false;
-                foreach (var root in destroyedRoots)
-                {
-                    ref var slot = ref allocator.Current(root);
-                    if (Unsafe.IsNullRef(ref slot) || slot.State != LifecycleState.PendingDestroy)
-                        continue;
-                    try
-                    {
-                        CheckSurvivingSources(root);
-                    }
-                    catch (TargetPolicyException error)
-                    {
-                        commandFailures.Add(error);
-                        Spare(root, ref slot);
-                        spared = true;
-                    }
-                }
-            } while (spared);
-        }
-        destroyedRoots.Clear();
+        provisional.Clear();
+        SpareViolatingRoots(destroyedRoots, destroyedRoots.Count);
     }
 
     void ApplySide(Span<CommandRecord> records, ref int stale)
@@ -1419,47 +1537,103 @@ public sealed partial class World
         foreach (var r in sideRecords)
         {
             ref readonly var record = ref records[r];
+            indexAt = IndexPositionOf(records, r);
             Replay(log, records, r);
             var live = allocator.IsCurrent(record.Entity);
-            if (!live || (!record.Other.IsDefault && !allocator.IsCurrent(record.Other)))
+            if (
+                !live
+                || (record.Kind == CommandKind.Retarget && !allocator.IsCurrent(record.OldTarget))
+            )
             {
                 stale++;
+                DropRecordedValue(in record);
+            }
+            else if (!record.Other.IsDefault && !allocator.IsCurrent(record.Other))
+            {
+                if (!OntoReleased(in record))
+                    stale++;
                 DropRecordedValue(in record);
             }
             else
                 ApplyRecorded(in record);
             if (live)
-                allocator.Slots[record.Entity.Index].Pending = false;
+                ClearPending(ref allocator.Slots[record.Entity.Index]);
         }
         log?.EndReplay();
+        indexAt = 0;
+    }
+
+    // A write onto a released entity gets that entity's policy, as if it had landed before the release.
+    bool OntoReleased(in CommandRecord record)
+    {
+        if (record.Kind == CommandKind.SetParent)
+        {
+            DestroyRecorded(record.Entity, LifecycleReason.Cascade);
+            return true;
+        }
+        if (record.Kind is not (CommandKind.Relate or CommandKind.Retarget))
+            return false;
+        var store = RelationsOf(record.Type);
+        if (store.Policy == TargetPolicy.Throw)
+        {
+            if (
+                Unrelatable(
+                    record.Type,
+                    record.Entity,
+                    MayLive(record.Entity),
+                    record.Other,
+                    false
+                ) is
+                { } error
+            )
+            {
+                commandFailures.Add(error);
+                return true;
+            }
+            if (record.Kind != CommandKind.Retarget)
+                return false;
+            store.Unrelate(this, record.Entity, record.OldTarget, default);
+            return true;
+        }
+        if (record.Kind == CommandKind.Retarget)
+            store.Unrelate(this, record.Entity, record.OldTarget, default);
+        else if (store.Policy != TargetPolicy.DestroySource)
+            return false;
+        if (store.Policy == TargetPolicy.DestroySource)
+            DestroyRecorded(record.Entity, LifecycleReason.Cascade);
+        return true;
+    }
+
+    void DestroyRecorded(Entity entity, LifecycleReason reason)
+    {
+        ref var slot = ref allocator.Slots[entity.Index];
+        if (!OwnsDestroy(slot))
+            MarkDestroyed(entity, ref slot, reason, recorded: true);
     }
 
     void ApplyRecorded(in CommandRecord record)
     {
-        if (record.Untracked)
-            untrackedDepth++;
+        var depth = untrackedDepth;
+        untrackedDepth = record.Untracked ? 1 : 0;
         try
         {
             ApplySideRecord(in record);
         }
         catch (Exception error)
         {
+            // Every store checks before it takes a recorded value, so a failed one still owns its buffers.
+            DropRecordedValue(in record);
             commandFailures.Add(error);
         }
         finally
         {
-            if (record.Untracked)
-                untrackedDepth--;
+            untrackedDepth = depth;
         }
     }
 
     void DropRecordedValue(in CommandRecord record)
     {
-        if (
-            record.Kind is CommandKind.Set or CommandKind.Relate or CommandKind.UpsertRow
-            && record.Payload >= 0
-            && layout.OwnsBuffers[record.Type]
-        )
+        if (OwnsValue(record.Kind) && record.Payload >= 0 && layout.OwnsBuffers[record.Type])
             FreeBuffers(
                 record.Type,
                 ref buffersById[record.Buffer].Payload(record.Type).RowRef(record.Payload)
@@ -1485,16 +1659,17 @@ public sealed partial class World
                     ?.Unrelate(this, record.Entity, record.Other, default);
                 break;
             case CommandKind.SetParent:
-                Reparent(record.Entity, record.Other, record.Payload, default, guardTargets: false);
+                Reparent(record.Entity, record.Other, record.Payload, default);
+                break;
+            case CommandKind.Destroy:
+                DestroyRecorded(record.Entity, record.Reason);
                 break;
             case CommandKind.CancelDestroy:
-                Reparent(record.Entity, default, -1, default, guardTargets: false);
+                ApplyCancel(record.Entity, ref allocator.Slots[record.Entity.Index]);
                 break;
             case CommandKind.Retarget:
-                var oldTarget = buffersById[record.Buffer].retargets[record.Payload];
-                if (allocator.IsCurrent(oldTarget))
-                    RelationsOf(record.Type)
-                        .ApplyRetarget(this, record.Entity, oldTarget, record.Other);
+                RelationsOf(record.Type)
+                    .ApplyRetarget(this, record.Entity, record.OldTarget, record.Other);
                 break;
             case CommandKind.ClearTargets:
                 RelationsOf(record.Type).ClearFrom(this, record.Entity, default);
@@ -1552,14 +1727,7 @@ public sealed partial class World
                 case EmissionKind.Component:
                 {
                     ref readonly var state = ref states[emission.State];
-                    var change = ComponentChange.Of(
-                        state.Before,
-                        state.EnableBefore,
-                        state.Present,
-                        state.Enable,
-                        readded: state.Before && state.Added,
-                        replaced: state.Replaced
-                    );
+                    var change = ChangeOf(in state);
                     if (change.LogRemoved)
                     {
                         Replay(log, records, state.RemovedBy);
@@ -1573,7 +1741,7 @@ public sealed partial class World
                         observers.QueueAdd(
                             entity,
                             state.Type,
-                            ref StoredRef(entity, state.Type),
+                            ref Bytes(ref StoredValue(entity, state.Type)),
                             default
                         );
                     if (change.HearReplace)
@@ -1607,23 +1775,4 @@ public sealed partial class World
     }
 
     WriteTag TagOf(in CommandRecord record) => buffersById[record.Buffer].tags[record.Sequence];
-
-    ref byte StoredRef(Entity entity, int type)
-    {
-        ref var slot = ref allocator.Slots[entity.Index];
-        switch (layout.Class[type])
-        {
-            case StorageClass.Column:
-            {
-                var archetype = slot.Placed;
-                return ref archetype.RowRef(archetype.ColumnSlot(type), slot.Row);
-            }
-            case StorageClass.Sparse:
-            {
-                var storage = StoredSparse(type);
-                return ref storage.RowRef(storage.SlotOf(entity.Index));
-            }
-        }
-        return ref ZeroBytes.Value;
-    }
 }

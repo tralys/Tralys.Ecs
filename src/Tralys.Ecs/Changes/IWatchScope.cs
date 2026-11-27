@@ -6,8 +6,10 @@ public interface IWatchScope<TBits>
     where TBits : unmanaged, Enum
 {
     /// <summary>Marks every entity the consumer may owe work, with what it owes.</summary>
+    [Effect(Effects.None)]
     static abstract void Everything(World world, ChangeSet<TBits> into);
 
     /// <summary>What <paramref name="entity"/> owes when it comes back; no bits when the consumer does not track it.</summary>
+    [Effect(Effects.None)]
     static abstract TBits Whole(World world, Entity entity);
 }

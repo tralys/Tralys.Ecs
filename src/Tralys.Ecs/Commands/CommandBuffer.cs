@@ -28,6 +28,7 @@ internal struct CommandRecord
 {
     public Entity Entity;
     public Entity Other;
+    public Entity OldTarget;
     public int Type;
     public int Payload;
     public int SchedulePosition;
@@ -35,8 +36,24 @@ internal struct CommandRecord
     public int Sequence;
     public int Buffer;
     public LifecycleReason Reason;
+    public long Position;
     public CommandKind Kind;
     public bool Untracked;
+
+    // A tracked write changed the value of an untracked Set in place, so playback stamps it as changed.
+    public bool TrackedEdit;
+
+    public readonly int Operands => Kind == CommandKind.Retarget ? 3 : 2;
+
+    [UnscopedRef]
+    public ref Entity Operand(int index)
+    {
+        if (index == 0)
+            return ref Entity;
+        if (index == 1)
+            return ref Other;
+        return ref OldTarget;
+    }
 }
 
 /// <summary>Deferred structural commands from one writer: the serial stage, or one chunk work item. Single-writer, so lock-free.</summary>
@@ -48,6 +65,7 @@ internal sealed class CommandBuffer
     internal int id;
     internal CommandRecord[] records = new CommandRecord[16];
     internal int count;
+    int untracked;
     internal int schedulePosition;
     internal int chunkIndex;
     int sequence;
@@ -70,8 +88,6 @@ internal sealed class CommandBuffer
         payloads = new PayloadStore?[world.registry.IndexBound];
     }
 
-    internal readonly List<Entity> retargets = [];
-
     public Commands Commands => new(this);
 
     internal void CheckLive(Entity entity)
@@ -88,19 +104,14 @@ internal sealed class CommandBuffer
             World.ThrowNotAlive(entity);
     }
 
-    internal int Retarget(Entity oldTarget)
-    {
-        retargets.Add(oldTarget);
-        return retargets.Count - 1;
-    }
-
     internal void Record(
         CommandKind kind,
         Entity entity,
         int type = -1,
         int payload = -1,
         LifecycleReason reason = default,
-        Entity other = default
+        Entity other = default,
+        Entity oldTarget = default
     )
     {
         if (count == records.Length)
@@ -112,6 +123,7 @@ internal sealed class CommandBuffer
             Kind = kind,
             Entity = entity,
             Other = other,
+            OldTarget = oldTarget,
             Type = type,
             Payload = payload,
             Reason = reason,
@@ -119,8 +131,11 @@ internal sealed class CommandBuffer
             ChunkIndex = parallel ? chunkIndex : -1,
             Sequence = sequence++,
             Buffer = id,
+            Position = parallel ? 0 : world.IndexTick(),
             Untracked = !world.Tracking,
         };
+        if (!world.Tracking)
+            untracked++;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -139,6 +154,7 @@ internal sealed class CommandBuffer
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Effect(Effects.Structural)]
     internal void At(string file, int line)
     {
         if (log is not null)
@@ -173,24 +189,64 @@ internal sealed class CommandBuffer
         return placeholder;
     }
 
-    internal void RecordSet<T>(Entity entity, in T value)
-        where T : struct
+    internal void RecordSet<T>(Entity entity, int type, in T value)
+        where T : struct => Record(CommandKind.Set, entity, type, PayloadFor(type, value));
+
+    internal int PayloadFor<T>(int type, in T value)
+        where T : struct =>
+        world.layout.Class[type] is StorageClass.Column or StorageClass.Sparse
+            ? Payloads<T>(type).Add(value)
+            : -1;
+
+    internal void EditedTracked(Entity entity, int type)
     {
-        var type = world.registry.IndexOf<T>();
-        Record(CommandKind.Set, entity, type, Payloads<T>(type).Add(value));
+        if (
+            untracked > 0
+            && Latest(entity, type, CommandKind.Set, CommandKind.Set, count) is var at and >= 0
+        )
+            records[at].TrackedEdit = true;
     }
 
-    internal void RecordValue<T>(
-        CommandKind kind,
-        Entity entity,
-        in T value,
-        Entity other = default
-    )
+    internal int RecordValue<T>(CommandKind kind, Entity entity, in T value, Entity other = default)
         where T : struct
     {
         var type = world.registry.IndexOf<T>();
-        Record(kind, entity, type, Payloads<T>(type).Add(value), other: other);
+        var payload = Payloads<T>(type).Add(value);
+        Record(kind, entity, type, payload, other: other);
+        return payload;
     }
+
+    internal int Latest(Entity entity, int type, CommandKind kind, CommandKind or, int before)
+    {
+        for (var i = Math.Min(before, count) - 1; i >= 0; i--)
+        {
+            ref readonly var record = ref records[i];
+            if (
+                record.Entity == entity
+                && record.Type == type
+                && (record.Kind == kind || record.Kind == or)
+            )
+                return i;
+        }
+        return -1;
+    }
+
+    internal int Next(Entity entity, int type, CommandKind kind, int from, int until)
+    {
+        for (var i = from; i < until; i++)
+        {
+            ref readonly var record = ref records[i];
+            if (record.Entity == entity && record.Type == type && record.Kind == kind)
+                return i;
+        }
+        return -1;
+    }
+
+    internal CommandKind KindOf(int record) => records[record].Kind;
+
+    internal ref T PayloadOf<T>(int record)
+        where T : struct =>
+        ref Unsafe.As<PayloadStore<T>>(Payload(records[record].Type))[records[record].Payload];
 
     internal void RecordIndexEdit(Entity entity, int type)
     {
@@ -209,10 +265,13 @@ internal sealed class CommandBuffer
     internal void Drop(Entity entity)
     {
         var kept = 0;
+        untracked = 0;
         for (var i = 0; i < count; i++)
         {
             if (records[i].Entity == entity)
                 continue;
+            if (records[i].Untracked)
+                untracked++;
             if (kept != i)
             {
                 records[kept] = records[i];
@@ -236,9 +295,9 @@ internal sealed class CommandBuffer
     {
         indexEditCount = 0;
         count = 0;
+        untracked = 0;
         sequence = 0;
         placeholders = 0;
-        retargets.Clear();
         foreach (var store in usedPayloads)
             store.Reset();
     }

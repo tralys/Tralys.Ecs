@@ -43,12 +43,11 @@ public sealed partial class IndexConflictTests
     public async Task A_conflict_is_thrown_together_with_a_finalisation_failure_of_the_same_playback()
     {
         using var world = TestWorlds.Create();
-        var source = world.Create();
-        var target = world.Create();
-        world.Relate(source, target, new Escorts());
-        world.Destroy(source);
-        world.Destroy(target);
-        world.CancelDestroy(source);
+        var ship = world.Create();
+        var crew = world.Create();
+        world.Relate(crew, ship, new CrewOf());
+        world.Destroy(ship);
+        world.Relate(world.Create(), crew, new Escorts());
         world.Set(world.Create(), new Serial { Code = 1 });
         var rival = world.Create();
         var buffer = world.RentBuffer(1, 0);

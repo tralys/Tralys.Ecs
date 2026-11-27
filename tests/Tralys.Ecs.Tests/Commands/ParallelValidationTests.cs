@@ -55,32 +55,6 @@ public sealed class ParallelValidationTests
             .IsEqualTo((1, default(Entity), true));
     }
 
-    sealed class ThrowsOnRemoving : ICoreHook
-    {
-        public void OnRemoving(World world, Entity entity, int type, ref byte value) =>
-            throw new ApplicationException("removal hook failed");
-    }
-
-    [Test]
-    public async Task A_playback_that_fails_part_way_releases_the_entities_it_never_created()
-    {
-        using var world = TestWorlds.Create();
-        var holder = world.Create();
-        world.Set(holder, new Health { Value = 1 });
-        world.coreHooks.Add(new ThrowsOnRemoving());
-        Entity created;
-        using (world.BeginDelivery())
-        {
-            created = world.Create();
-            world.Remove<Health>(holder);
-        }
-
-        await Assert.That(() => world.Playback()).Throws<ApplicationException>();
-        world.coreHooks.Clear();
-
-        await Assert.That(world.Exists(created)).IsFalse();
-    }
-
     [Test]
     public async Task A_buffered_create_destroyed_after_taking_a_child_takes_the_child_with_it()
     {

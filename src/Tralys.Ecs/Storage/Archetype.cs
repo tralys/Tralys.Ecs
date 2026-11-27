@@ -38,7 +38,7 @@ internal sealed class MoveMap(
 
 internal sealed class Archetype
 {
-    public readonly int Id;
+    public int Id;
     public readonly ArchetypeSignature Signature;
     public readonly int[] Types;
     public readonly int[] ColumnTypes;
@@ -62,6 +62,9 @@ internal sealed class Archetype
     public ulong[] EnableWords = [];
 
     public ulong[] DestroyWords = [];
+
+    // One bit per row, kept equal to the row's slot Pending flag.
+    public ulong[] PendingWords = [];
 
     // Per inherited kind: the bit an entity inherits from its ancestors (their pending destroy or inherited tag), never its own.
     public ulong[] AncestorWords = [];
@@ -195,6 +198,16 @@ internal sealed class Archetype
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsPending(int row) => (PendingWords[row >> 6] & (1UL << row)) != 0;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetPending(int row, bool pending)
+    {
+        ref var word = ref PendingWords[row >> 6];
+        word = pending ? word | (1UL << row) : word & ~(1UL << row);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasAncestor(int kind, int row) =>
         (AncestorWords[(kind * Words) + (row >> 6)] & (1UL << row)) != 0;
 
@@ -302,10 +315,10 @@ internal sealed class Archetype
         if (lastMove?.Target == target)
             return lastMove;
         moves ??= [];
-        if (!moves.TryGetValue(target.Id, out var map))
+        if (!moves.TryGetValue(target.Id, out var map) || map.Target != target)
         {
             map = BuildMap(target);
-            moves.Add(target.Id, map);
+            moves[target.Id] = map;
         }
         return lastMove = map;
     }
@@ -369,6 +382,7 @@ internal sealed class Archetype
             EnableWords = grown;
         }
         Array.Resize(ref DestroyWords, words);
+        Array.Resize(ref PendingWords, words);
         var ancestors = new ulong[inheritedCount * words];
         for (var k = 0; k < inheritedCount; k++)
             Array.Copy(AncestorWords, k * Words, ancestors, k * words, Words);
@@ -407,6 +421,7 @@ internal sealed class Archetype
         for (var e = 0; e < enableCount; e++)
             SetEnabled(e, to, IsEnabled(e, from));
         SetPendingDestroy(to, IsPendingDestroy(from));
+        SetPending(to, IsPending(from));
         if (hierarchy.EverUsed)
             CopyAncestors(to, this, from);
         for (var t = 0; t < trackedCount; t++)
@@ -430,6 +445,7 @@ internal sealed class Archetype
         for (var e = 0; e < enableCount; e++)
             SetEnabled(e, row, false);
         SetPendingDestroy(row, false);
+        SetPending(row, false);
         if (!hierarchy.EverUsed)
             return;
         for (var k = 0; k < inheritedCount; k++)
@@ -446,6 +462,7 @@ internal sealed class Archetype
         Array.Clear(Entities, 0, Count);
         Array.Clear(EnableWords);
         Array.Clear(DestroyWords);
+        Array.Clear(PendingWords);
         Array.Clear(AncestorWords);
         Array.Clear(MaxChanged);
         Count = 0;
@@ -499,27 +516,30 @@ internal sealed class Archetype
         Count = state.Count;
     }
 
-    public void ForgetFrom(int count)
+    public static bool Kept(Archetype archetype, List<Archetype> archetypes) =>
+        archetype.Id < archetypes.Count && archetypes[archetype.Id] == archetype;
+
+    public void ForgetDropped(List<Archetype> archetypes)
     {
-        Forget(AddEdges, count);
-        Forget(RemoveEdges, count);
-        if (PartitionEdge?.Id >= count)
+        Forget(AddEdges, archetypes);
+        Forget(RemoveEdges, archetypes);
+        if (PartitionEdge is { } partition && !Kept(partition, archetypes))
             PartitionEdge = null;
-        if (lastMove?.Target.Id >= count)
+        if (lastMove is { } last && !Kept(last.Target, archetypes))
             lastMove = null;
         if (moves is null)
             return;
-        foreach (var id in moves.Keys.ToArray())
+        foreach (var (id, map) in moves.ToArray())
         {
-            if (id >= count)
+            if (!Kept(map.Target, archetypes))
                 moves.Remove(id);
         }
 
-        static void Forget(Dictionary<int, Archetype> edges, int count)
+        static void Forget(Dictionary<int, Archetype> edges, List<Archetype> archetypes)
         {
             foreach (var (type, target) in edges.ToArray())
             {
-                if (target.Id >= count)
+                if (!Kept(target, archetypes))
                     edges.Remove(type);
             }
         }
@@ -532,6 +552,7 @@ internal sealed class Archetype
         Entities = [];
         EnableWords = [];
         DestroyWords = [];
+        PendingWords = [];
         AncestorWords = [];
         stamps = [];
         MaxChanged = [];

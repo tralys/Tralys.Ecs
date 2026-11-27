@@ -3,9 +3,11 @@ namespace Tralys.Ecs;
 /// <summary>Generates <c>Run{Name}</c>, <c>Run{Name}For(entity)</c>, <c>Run{Name}For(entities)</c>, <c>Run{Name}ForSubtree(root)</c>,
 /// <c>Run{Name}ChildrenOf(parent)</c> and <c>Run{Name}TargetsOf&lt;R&gt;(source)</c> for a query body. Parameters:
 /// <see cref="Entity"/>, <c>in T</c>, <c>ref T</c>, <see cref="Optional{T}"/>, <see cref="OptionalRef{T}"/>, <see cref="Commands"/> (parallel only),
-/// <see cref="ChunkContext"/>, <see cref="World"/>, <see cref="Parent{T}"/>, <see cref="Up{T}"/>, one <c>ref</c> accumulator implementing <see cref="IReduction{TSelf}"/>, and
+/// <see cref="ChunkContext"/>, <see cref="World"/> (serial only), <see cref="WorldReader"/>, <see cref="Parent{T}"/>, <see cref="Up{T}"/>, one <c>ref</c> accumulator implementing <see cref="IReduction{TSelf}"/>, and
 /// <see cref="ArgAttribute"/> values passed through the run. A <c>bool</c> body stops the run by returning false. A serial body reads anything
-/// and writes values at once but changes no structure, which throws; a <see cref="CollectAttribute"/> act makes that change.</summary>
+/// and writes values at once. Its structural changes, row adds and removes and edge changes record: reads see the recorded component
+/// changes, the walk skips a later row they take out of the query, and they apply when the outermost walk closes, before the run
+/// returns.</summary>
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class QueryAttribute : Attribute
 {
@@ -18,9 +20,9 @@ public sealed class QueryAttribute : Attribute
     public bool DepthOrdered { get; set; }
 }
 
-/// <summary>Collect-then-act: the body is a predicate that, like a serial query body, changes no structure; the run snapshots the entities
-/// it returns true for, closes the walk, then calls <see cref="Act"/> for each one still alive, where structural changes apply at once
-/// and faults are contained per entity.</summary>
+/// <summary>Collect-then-act: the body is a predicate that, like a serial query body, records its structural changes; the run snapshots the
+/// entities it returns true for, closes the walk, applying what it recorded, then calls <see cref="Act"/> for each one still alive, where
+/// structural changes apply at once and faults are contained per entity.</summary>
 [AttributeUsage(AttributeTargets.Method, Inherited = false)]
 public sealed class CollectAttribute : Attribute
 {

@@ -61,10 +61,14 @@ partial class CargoQueries
             for (var __bits = global::Tralys.Ecs.Generated.Plumbing.RowMask(in __chunk); __bits != 0; __bits &= __bits - 1)
             {
                 var __i = global::System.Numerics.BitOperations.TrailingZeroCount(__bits);
-                ref var __v0 = ref global::Tralys.Ecs.Generated.Plumbing.Unstamped(in __t0, __i);
-                var __b0 = global::Tralys.Ecs.Generated.Plumbing.Compares(in __t0) ? __v0 : default;
+                if (!global::Tralys.Ecs.Generated.Plumbing.Visits(in __chunk, __i)) continue;
+                var __p = global::Tralys.Ecs.Generated.Plumbing.Pending(in __chunk, __i);
+                var __e0 = __p ? global::Tralys.Ecs.Generated.Plumbing.Overlay(in __chunk, 0, __i) : -1;
+                var __o0 = false;
+                ref var __v0 = ref __e0 > 0 ? ref global::Tralys.Ecs.Generated.Plumbing.Overlaid<global::Tralys.Ecs.Downstream.Fixture.Cargo>(in __chunk, 0, __i, out __o0, out _) : ref global::Tralys.Ecs.Generated.Plumbing.Unstamped(in __t0, __i);
+                var __b0 = !__o0 && global::Tralys.Ecs.Generated.Plumbing.Compares(in __t0) ? __v0 : default;
                 CargoQueries.Lighten(ref __v0);
-                if (global::Tralys.Ecs.Generated.Plumbing.Compares(in __t0) && !global::Tralys.Ecs.Generated.Plumbing.Same(in __b0, in __v0)) global::Tralys.Ecs.Generated.Plumbing.Changed(in __t0, __i, in __b0);
+                if (!__o0 && global::Tralys.Ecs.Generated.Plumbing.Compares(in __t0) && !global::Tralys.Ecs.Generated.Plumbing.Same(in __b0, in __v0)) global::Tralys.Ecs.Generated.Plumbing.Changed(in __t0, __i, in __b0);
             }
         }
     }

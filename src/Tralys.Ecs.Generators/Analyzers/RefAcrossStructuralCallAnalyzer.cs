@@ -6,9 +6,12 @@ using Microsoft.CodeAnalysis.Operations;
 
 namespace Tralys.Ecs.Generators.Analyzers;
 
-/// <summary>A <c>ref</c> local, or an <c>Optional</c> local, taken from the world points into a column; a later structural change on that world can move or reallocate the
-/// row, so a use after it may read another entity. Uses are checked along every control-flow path, loop back-edges and exception handlers
-/// included. Query bodies are exempt: their structural changes are deferred.</summary>
+/// <summary>A borrow points into world storage: a <c>ref</c> to a component or row, or a local of a <c>[Borrow]</c> type. A later call that
+/// can move that storage may leave it reading another entity or row. The rule is local: a member whose <c>[Effect]</c> declares a move of
+/// the borrow's storage, a call into code outside the runtime that can reach a world handle through its receiver, its arguments, its
+/// captures or its type's fields, and a delegate all count. Any two world handles may name the same world. Uses are checked along every
+/// control-flow path, loop back-edges, exception handlers and finally blocks included. Query and collect bodies and chunk kernels are
+/// exempt: nothing moves while a walk is open.</summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
 {
@@ -19,12 +22,32 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterOperationBlockAction(Analyze);
+        context.RegisterCompilationStartAction(start =>
+        {
+            if (Effects.IsRuntime(start.Compilation))
+                return;
+            var reach = new WorldReach(start.Compilation);
+            start.RegisterOperationBlockAction(block => Analyze(block, reach));
+        });
     }
 
-    readonly record struct Origin(ISymbol? Root, bool Exact);
+    readonly record struct Borrow(int MovedBy, string? StaleBy);
 
-    readonly record struct Borrow(ImmutableArray<Origin> Origins, string? StaleBy);
+    // A borrow is held by a local, or by a flow capture the graph makes for a conditional ref.
+    sealed class Holders : IEqualityComparer<object>
+    {
+        public static readonly Holders Instance = new();
+
+        bool IEqualityComparer<object>.Equals(object? x, object? y) =>
+            x is ISymbol a && y is ISymbol b
+                ? SymbolEqualityComparer.Default.Equals(a, b)
+                : object.Equals(x, y);
+
+        int IEqualityComparer<object>.GetHashCode(object obj) =>
+            obj is ISymbol symbol
+                ? SymbolEqualityComparer.Default.GetHashCode(symbol)
+                : obj.GetHashCode();
+    }
 
     sealed class Findings
     {
@@ -42,11 +65,15 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    static void Analyze(OperationBlockAnalysisContext context)
+    static void Analyze(OperationBlockAnalysisContext context, WorldReach reach)
     {
         if (
             context.OwningSymbol is IMethodSymbol owner
-            && (Symbols.Has(owner, Symbols.Query) || Symbols.Has(owner, Symbols.Collect))
+            && (
+                Symbols.Has(owner, Symbols.Query)
+                || Symbols.Has(owner, Symbols.Collect)
+                || Kernel(owner)
+            )
         )
             return;
         var findings = new Findings();
@@ -63,7 +90,7 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
                         or OperationKind.Block
                 && roots.Add(root)
             )
-                Walk(context.GetControlFlowGraph(block), findings);
+                Walk(context.GetControlFlowGraph(block), findings, reach);
         }
         foreach (var finding in findings.First)
             context.ReportDiagnostic(
@@ -76,11 +103,27 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
             );
     }
 
-    static void Walk(ControlFlowGraph graph, Findings findings)
+    static bool Kernel(IMethodSymbol method) =>
+        method.ContainingType.AllInterfaces.Any(contract =>
+            (
+                Symbols.Is(contract, Symbols.ChunkKernel)
+                || Symbols.Is(contract, Symbols.ReducingKernel)
+            )
+            && contract
+                .GetMembers("Execute")
+                .Any(member =>
+                    SymbolEqualityComparer.Default.Equals(
+                        method.ContainingType.FindImplementationForInterfaceMember(member),
+                        method
+                    )
+                )
+        );
+
+    static void Walk(ControlFlowGraph graph, Findings findings, WorldReach reach)
     {
         var blocks = graph.Blocks;
-        var entries = new Dictionary<ILocalSymbol, Borrow>?[blocks.Length];
-        entries[0] = new(SymbolEqualityComparer.Default);
+        var entries = new Dictionary<object, Borrow>?[blocks.Length];
+        entries[0] = new(Holders.Instance);
         var work = new Queue<int>();
         var queued = new bool[blocks.Length];
         work.Enqueue(0);
@@ -91,11 +134,14 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
             queued[index] = false;
             if (entries[index] is not { } start)
                 continue;
-            var state = new Dictionary<ILocalSymbol, Borrow>(start, SymbolEqualityComparer.Default);
-            Transfer(blocks[index], state, null);
-            foreach (var (next, handler) in Successors(blocks[index]))
+            var state = new Dictionary<object, Borrow>(start, Holders.Instance);
+            Transfer(blocks[index], state, null, reach);
+            foreach (var (next, handler, through) in Successors(blocks[index]))
             {
-                var changed = Merge(ref entries[next], state);
+                var changed = Merge(
+                    ref entries[next],
+                    through.IsDefaultOrEmpty ? state : AfterFinally(blocks, through, state, reach)
+                );
                 if (handler)
                     changed |= Merge(ref entries[next], start);
                 if (changed && !queued[next])
@@ -110,12 +156,13 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
             if (entries[block.Ordinal] is { } start)
                 Transfer(
                     block,
-                    new Dictionary<ILocalSymbol, Borrow>(start, SymbolEqualityComparer.Default),
-                    findings
+                    new Dictionary<object, Borrow>(start, Holders.Instance),
+                    findings,
+                    reach
                 );
         }
         foreach (var function in graph.LocalFunctions)
-            Walk(graph.GetLocalFunctionControlFlowGraph(function), findings);
+            Walk(graph.GetLocalFunctionControlFlowGraph(function), findings, reach);
         foreach (var block in blocks)
         {
             var operations = block.BranchValue is { } value
@@ -128,21 +175,26 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
                         .DescendantsAndSelf()
                         .OfType<IFlowAnonymousFunctionOperation>()
                 )
-                    Walk(graph.GetAnonymousFunctionControlFlowGraph(lambda), findings);
+                    Walk(graph.GetAnonymousFunctionControlFlowGraph(lambda), findings, reach);
             }
         }
     }
 
-    static IEnumerable<(int Ordinal, bool Handler)> Successors(BasicBlock block)
+    // A branch out of a try runs its finally blocks first; the end of a finally names no destination, so the branch carries their effect.
+    static IEnumerable<(
+        int Ordinal,
+        bool Handler,
+        ImmutableArray<ControlFlowRegion> Through
+    )> Successors(BasicBlock block)
     {
         foreach (var branch in new[] { block.FallThroughSuccessor, block.ConditionalSuccessor })
         {
             if (branch is null)
                 continue;
             if (branch.Destination is { } destination)
-                yield return (destination.Ordinal, false);
+                yield return (destination.Ordinal, false, branch.FinallyRegions);
             foreach (var region in branch.FinallyRegions)
-                yield return (region.FirstBlockOrdinal, false);
+                yield return (region.FirstBlockOrdinal, false, default);
         }
         // A nested graph's root links to the region of the outer graph it sits in, whose block ordinals are not this graph's.
         for (
@@ -159,19 +211,36 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
             foreach (var handler in guarded.NestedRegions)
             {
                 if (handler != region)
-                    yield return (handler.FirstBlockOrdinal, true);
+                    yield return (handler.FirstBlockOrdinal, true, default);
             }
         }
     }
 
-    static bool Merge(
-        ref Dictionary<ILocalSymbol, Borrow>? into,
-        Dictionary<ILocalSymbol, Borrow> from
+    static Dictionary<object, Borrow> AfterFinally(
+        ImmutableArray<BasicBlock> blocks,
+        ImmutableArray<ControlFlowRegion> regions,
+        Dictionary<object, Borrow> state,
+        WorldReach reach
     )
+    {
+        var after = new Dictionary<object, Borrow>(state, Holders.Instance);
+        foreach (var region in regions)
+        {
+            for (
+                var ordinal = region.FirstBlockOrdinal;
+                ordinal <= region.LastBlockOrdinal;
+                ordinal++
+            )
+                Transfer(blocks[ordinal], after, null, reach);
+        }
+        return after;
+    }
+
+    static bool Merge(ref Dictionary<object, Borrow>? into, Dictionary<object, Borrow> from)
     {
         if (into is null)
         {
-            into = new(from, SymbolEqualityComparer.Default);
+            into = new(from, Holders.Instance);
             return true;
         }
         var changed = false;
@@ -183,16 +252,11 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
                 changed = true;
                 continue;
             }
-            var origins = known.Origins;
-            foreach (var origin in pair.Value.Origins)
-            {
-                if (!origins.Any(o => Same(o, origin)))
-                    origins = origins.Add(origin);
-            }
+            var movedBy = known.MovedBy | pair.Value.MovedBy;
             var staleBy = known.StaleBy ?? pair.Value.StaleBy;
-            if (origins.Length != known.Origins.Length || staleBy != known.StaleBy)
+            if (movedBy != known.MovedBy || staleBy != known.StaleBy)
             {
-                into[pair.Key] = new Borrow(origins, staleBy);
+                into[pair.Key] = new Borrow(movedBy, staleBy);
                 changed = true;
             }
         }
@@ -201,21 +265,23 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
 
     static void Transfer(
         BasicBlock block,
-        Dictionary<ILocalSymbol, Borrow> state,
-        Findings? findings
+        Dictionary<object, Borrow> state,
+        Findings? findings,
+        WorldReach reach
     )
     {
         foreach (var operation in block.Operations)
-            Visit(operation, state, findings);
+            Visit(operation, state, findings, reach);
         if (block.BranchValue is { } value)
-            Visit(value, state, findings);
+            Visit(value, state, findings, reach);
     }
 
     // Children run before their parent, so an argument read before a structural call is not a use after it.
     static void Visit(
         IOperation operation,
-        Dictionary<ILocalSymbol, Borrow> state,
-        Findings? findings
+        Dictionary<object, Borrow> state,
+        Findings? findings,
+        WorldReach reach
     )
     {
         switch (operation)
@@ -223,45 +289,63 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
             case IFlowAnonymousFunctionOperation:
                 return;
             case ISimpleAssignmentOperation { Target: ILocalReferenceOperation target } assignment
-                when HoldsRef(target.Local)
+                when HoldsBorrow(target.Local)
                     && (assignment.IsRef || target.Local.RefKind == RefKind.None):
-                Visit(assignment.Value, state, findings);
-                if (Source(assignment.Value) is { } origin)
-                    state[target.Local] = new Borrow([origin], null);
-                else
-                    state.Remove(target.Local);
+                Visit(assignment.Value, state, findings, reach);
+                Bind(target.Local, assignment.Value, state);
+                return;
+            case IFlowCaptureOperation capture:
+                Visit(capture.Value, state, findings, reach);
+                Bind(capture.Id, capture.Value, state);
+                return;
+            case IIsPatternOperation { Pattern: var pattern } match
+                when Declared(pattern) is { } local && HoldsBorrow(local):
+                Visit(match.Value, state, findings, reach);
+                Visit(pattern, state, findings, reach);
+                Bind(local, match.Value, state);
                 return;
             case ILocalReferenceOperation reference:
-                if (state.TryGetValue(reference.Local, out var borrow) && borrow.StaleBy is { } by)
+                if (state.TryGetValue(reference.Local, out var held) && held.StaleBy is { } by)
                     findings?.Report(reference.Local, reference, by);
-                return;
-            case IInvocationOperation invocation:
-                foreach (var child in invocation.ChildOperations)
-                    Visit(child, state, findings);
-                if (
-                    Effects.Of(invocation.TargetMethod) is { } effect
-                    && effect.Has(Effects.MovesRows)
-                )
-                    Invalidate(state, invocation);
                 return;
         }
         foreach (var child in operation.ChildOperations)
-            Visit(child, state, findings);
+            Visit(child, state, findings, reach);
+        if (state.Count == 0)
+            return;
+        var move = reach.Of(operation);
+        if (move.Storage != 0)
+            Invalidate(state, move.Storage, move.Label);
     }
 
-    static void Invalidate(Dictionary<ILocalSymbol, Borrow> state, IInvocationOperation invocation)
+    static void Bind(object holder, IOperation value, Dictionary<object, Borrow> state)
     {
-        var changed = OriginOf(invocation.Instance);
-        var name = invocation.TargetMethod.ContainingType.Name + "." + invocation.TargetMethod.Name;
-        foreach (var local in state.Keys.ToArray())
+        if (Source(value, state) is { } borrow)
+            state[holder] = borrow;
+        else
+            state.Remove(holder);
+    }
+
+    // Only the pattern's own declaration binds the tested value; a nested one binds a member of it.
+    static ILocalSymbol? Declared(IPatternOperation pattern) =>
+        pattern switch
         {
-            var borrow = state[local];
-            if (borrow.StaleBy is null && borrow.Origins.Any(o => SameWorld(o, changed)))
-                state[local] = borrow with { StaleBy = name };
+            IDeclarationPatternOperation { DeclaredSymbol: ILocalSymbol local } => local,
+            IRecursivePatternOperation { DeclaredSymbol: ILocalSymbol local } => local,
+            _ => null,
+        };
+
+    static void Invalidate(Dictionary<object, Borrow> state, int moves, string name)
+    {
+        foreach (var holder in state.Keys.ToArray())
+        {
+            var borrow = state[holder];
+            if (borrow.StaleBy is null && (borrow.MovedBy & moves) != 0)
+                state[holder] = borrow with { StaleBy = name };
         }
     }
 
-    static Origin? Source(IOperation operation)
+    static Borrow? Source(IOperation operation, Dictionary<object, Borrow> state)
     {
         while (true)
         {
@@ -276,48 +360,74 @@ public sealed class RefAcrossStructuralCallAnalyzer : DiagnosticAnalyzer
                 case IFieldReferenceOperation { Instance: { } instance }:
                     operation = instance;
                     continue;
-                case IPropertyReferenceOperation { Instance: { } optional }
-                    when Symbols.Is(optional.Type, Symbols.Optional):
-                    operation = optional;
-                    continue;
+                case ILocalReferenceOperation local:
+                    return state.TryGetValue(local.Local, out var held) ? held : null;
+                case IFlowCaptureReferenceOperation capture:
+                    return state.TryGetValue(capture.Id, out var captured) ? captured : null;
                 case IInvocationOperation invocation
-                    when Effects.Of(invocation.TargetMethod) is { } effect
-                        && effect.Has(Effects.Borrows):
-                    return OriginOf(invocation.Instance);
+                    when MovedBy(
+                        invocation.TargetMethod.ReturnType,
+                        invocation.TargetMethod.RefKind
+                    )
+                        is var kinds
+                            and not 0:
+                    return new Borrow(kinds, null);
+                case IPropertyReferenceOperation property
+                    when MovedBy(property.Property.Type, property.Property.RefKind)
+                        is var kinds
+                            and not 0:
+                    if (
+                        Unwrap(property.Instance) is ILocalReferenceOperation owner
+                        && state.TryGetValue(owner.Local, out var inner)
+                    )
+                        return inner;
+                    return new Borrow(kinds, null);
                 default:
                     return null;
             }
         }
     }
 
-    static bool HoldsRef(ILocalSymbol local) =>
-        local.RefKind != RefKind.None || Symbols.Is(local.Type, Symbols.Optional);
-
-    static Origin OriginOf(IOperation? instance)
+    static int MovedBy(ITypeSymbol type, RefKind byRef)
     {
-        while (instance is IConversionOperation or IParenthesizedOperation)
-            instance = instance switch
+        if (byRef != RefKind.None)
+            return Stored(type);
+        if (!Effects.IsBorrow(type))
+            return 0;
+        var kinds = 0;
+        foreach (var argument in ((INamedTypeSymbol)type).TypeArguments)
+            kinds |= Stored(argument);
+        return kinds == 0 ? Effects.Moves : kinds;
+    }
+
+    static int Stored(ITypeSymbol type)
+    {
+        if (type is ITypeParameterSymbol parameter)
+        {
+            var kinds = 0;
+            foreach (var constraint in parameter.ConstraintTypes)
+                kinds |= Stored(constraint);
+            return kinds;
+        }
+        if (Symbols.Is(type, Symbols.IRow) || Symbols.Implements(type, Symbols.IRow))
+            return Effects.MovesRowBlocks;
+        if (Symbols.Is(type, Symbols.IDeclared) || Symbols.Implements(type, Symbols.IDeclared))
+            return Effects.MovesEntities;
+        return 0;
+    }
+
+    static bool HoldsBorrow(ILocalSymbol local) =>
+        local.RefKind != RefKind.None || Effects.IsBorrow(local.Type);
+
+    static IOperation? Unwrap(IOperation? operation)
+    {
+        while (operation is IConversionOperation or IParenthesizedOperation)
+            operation = operation switch
             {
                 IConversionOperation conversion => conversion.Operand,
                 IParenthesizedOperation parenthesized => parenthesized.Operand,
-                _ => instance,
+                _ => operation,
             };
-        ISymbol? root = instance switch
-        {
-            ILocalReferenceOperation local => local.Local,
-            IParameterReferenceOperation parameter => parameter.Parameter,
-            IFieldReferenceOperation field => field.Field,
-            IPropertyReferenceOperation property => property.Property,
-            _ => null,
-        };
-        return new Origin(root, instance?.Type is { } type && Symbols.Is(type, Symbols.World));
+        return operation;
     }
-
-    static bool Same(Origin a, Origin b) =>
-        a.Exact == b.Exact && SymbolEqualityComparer.Default.Equals(a.Root, b.Root);
-
-    // Two World-typed roots name the same world only if they are the same symbol; anything else may share a world.
-    static bool SameWorld(Origin taken, Origin changed) =>
-        !(taken.Exact && changed.Exact && taken.Root is not null && changed.Root is not null)
-        || SymbolEqualityComparer.Default.Equals(taken.Root, changed.Root);
 }

@@ -9,10 +9,11 @@ readonly partial struct CarrierView : global::Tralys.Ecs.IEntityView<CarrierView
 
     CarrierView(global::Tralys.Ecs.WorldEntity entity) => __entity = entity;
 
-    public global::Tralys.Ecs.WorldEntity Entity => __entity;
+    public readonly global::Tralys.Ecs.WorldEntity Entity { [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.None)] get => __entity; }
 
-    public bool IsLive => __entity.IsLive;
+    public readonly bool IsLive { [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.None)] get => __entity.IsLive; }
 
+    [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.None)]
     public static bool TryFrom(global::Tralys.Ecs.WorldEntity entity, out CarrierView view)
     {
         if (entity.State is not global::Tralys.Ecs.LifecycleState.Dead && entity.Has<global::Tralys.Ecs.Downstream.Fixture.Cargo>())
@@ -24,13 +25,14 @@ readonly partial struct CarrierView : global::Tralys.Ecs.IEntityView<CarrierView
         return false;
     }
 
-    public bool TryGetCargo(out global::Tralys.Ecs.Downstream.Fixture.Cargo value) => __entity.TryGet<global::Tralys.Ecs.Downstream.Fixture.Cargo>(out value);
+    [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.None)]
+    public readonly bool TryGetCargo(out global::Tralys.Ecs.Downstream.Fixture.Cargo value) => __entity.TryGet<global::Tralys.Ecs.Downstream.Fixture.Cargo>(out value);
 
-    public ref readonly global::Tralys.Ecs.Downstream.Fixture.Cargo Cargo => ref __entity.Get<global::Tralys.Ecs.Downstream.Fixture.Cargo>();
-
-    [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.Mutates)]
-    public void ReplaceCargo(in global::Tralys.Ecs.Downstream.Fixture.Cargo value, [global::System.Runtime.CompilerServices.CallerFilePath] string file = "", [global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => __entity.Replace(value, file: file, line: line);
+    public readonly ref readonly global::Tralys.Ecs.Downstream.Fixture.Cargo Cargo { [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.None)] get => ref __entity.Get<global::Tralys.Ecs.Downstream.Fixture.Cargo>(); }
 
     [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.Mutates)]
-    public global::Tralys.Ecs.ComponentEdit<global::Tralys.Ecs.Downstream.Fixture.Cargo> EditCargo() => __entity.Edit<global::Tralys.Ecs.Downstream.Fixture.Cargo>();
+    public readonly void ReplaceCargo(in global::Tralys.Ecs.Downstream.Fixture.Cargo value, [global::System.Runtime.CompilerServices.CallerFilePath] string file = "", [global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => __entity.Replace(value, file: file, line: line);
+
+    [global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.Mutates)]
+    public readonly global::Tralys.Ecs.ComponentEdit<global::Tralys.Ecs.Downstream.Fixture.Cargo> EditCargo() => __entity.Edit<global::Tralys.Ecs.Downstream.Fixture.Cargo>();
 }

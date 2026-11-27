@@ -3,6 +3,7 @@ namespace Tralys.Ecs;
 /// <summary>Names a component type. Its dense index is known once a registry containing the type is built.</summary>
 internal readonly unsafe struct ComponentKey : IEquatable<ComponentKey>
 {
+    [Effect(Effects.None)]
     readonly delegate* <int> index;
 
     ComponentKey(delegate* <int> index, Type type)

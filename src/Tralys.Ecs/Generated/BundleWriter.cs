@@ -35,9 +35,9 @@ public ref struct BundleWriter
         if (buffer is not null)
         {
             if (buffer.parallel)
-                buffer.RecordSet(entity, value);
+                buffer.RecordSet(entity, ComponentType<T>.Index, value);
             else
-                buffer.world.StageBundled(entity, value);
+                buffer.world.StageSet(entity, ComponentType<T>.Index, value);
             return;
         }
         if (world is null || archetype is null)

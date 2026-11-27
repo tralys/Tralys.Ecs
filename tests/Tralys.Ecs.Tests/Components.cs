@@ -263,6 +263,12 @@ public partial struct Escorts;
 [Relation(OnTargetDestroyed = TargetPolicy.DestroySource)]
 public partial struct CrewOf;
 
+[Relation(Traits = RelationTraits.Symmetric, OnTargetDestroyed = TargetPolicy.DestroySource)]
+public partial struct Bonded;
+
+[Relation(Traits = RelationTraits.Symmetric, OnTargetDestroyed = TargetPolicy.Throw)]
+public partial struct Sworn;
+
 [Rows, Tracked]
 public partial struct Effect
 {
@@ -385,7 +391,7 @@ static class TestWorlds
     public static readonly Registry Registry = Registry.Build(EcsModule.All);
 
     public static World Create(in WorldOptions options = default) =>
-        World.Create(Registry, options with { CheckThread = true });
+        World.Create(Registry, options with { CheckThread = true, VerifyInvariants = true });
 
     public static World Logged() => Create(new WorldOptions { AttributedLogCapacity = 1 << 12 });
 }

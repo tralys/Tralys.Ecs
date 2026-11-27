@@ -29,12 +29,42 @@ public sealed class ObserverMutationTests
     }
 
     [Test]
-    public async Task Removing_an_observer_that_is_no_longer_registered_throws()
+    public async Task Removing_an_observer_twice_does_nothing()
     {
         using var world = TestWorlds.Create();
         var id = world.Observers.OnAdd(new RemovesItself());
         world.Observers.Remove(id);
 
-        await Assert.That(() => world.Observers.Remove(id)).Throws<ArgumentException>();
+        await Assert.That(() => world.Observers.Remove(id)).ThrowsNothing();
+    }
+
+    sealed class Counts : IAddObserver<Position>
+    {
+        public int Count;
+
+        public void OnAdd(in ObserverContext context, Entity entity, in Position value) => Count++;
+    }
+
+    sealed class RemovesOther : IAddObserver<Position>
+    {
+        public ObserverId Other;
+
+        public void OnAdd(in ObserverContext context, Entity entity, in Position value) =>
+            context.World.Observers.Remove(Other);
+    }
+
+    [Test]
+    public async Task An_observer_removed_by_an_earlier_one_misses_the_event_being_delivered()
+    {
+        using var world = TestWorlds.Create();
+        var remover = new RemovesOther();
+        world.Observers.OnAdd(remover);
+        var removed = new Counts();
+        remover.Other = world.Observers.OnAdd(removed);
+        world.Set(world.Create(), new Position { X = 1 });
+
+        world.Playback();
+
+        await Assert.That(removed.Count).IsEqualTo(0);
     }
 }

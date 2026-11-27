@@ -92,15 +92,16 @@ public sealed class CaptureAttribute(CapturePolicy policy) : Attribute
     public CapturePolicy Policy { get; } = policy;
 }
 
-/// <summary>Writes to this component raise the descendant version of its ancestors, the related version of relation sources, or both;
-/// name at least one.</summary>
+/// <summary>Writes to this component, and its removal, raise the descendant version of its ancestors, the related version of relation
+/// sources, or both; name at least one. Only a component takes it: a rows or relation type is rejected.</summary>
 [AttributeUsage(AttributeTargets.Struct, Inherited = false)]
 public sealed class PropagateChangesAttribute : Attribute
 {
-    /// <summary>A write raises <see cref="ChangeTracking.DescendantVersionOf"/> of every ancestor of the written entity.</summary>
+    /// <summary>A write or removal raises <see cref="ChangeTracking.DescendantVersionOf"/> of every ancestor of the written entity.</summary>
     public bool ToAncestors { get; set; }
 
-    /// <summary>A write raises <see cref="ChangeTracking.RelatedVersionOf{R}"/> of every entity with an edge to the written entity.</summary>
+    /// <summary>A write or removal raises <see cref="ChangeTracking.RelatedVersionOf{R}"/> of every entity with an edge to the written
+    /// entity.</summary>
     public bool ToRelationSources { get; set; }
 }
 
@@ -118,7 +119,8 @@ public enum IndexKind
 }
 
 /// <summary>Which entity a unique index returns for a key two entities share. The other stays recorded, and takes the key when the
-/// holder leaves it.</summary>
+/// holder leaves it. Earlier and later follow the writes: a write recorded for later counts at its call, a parallel command at the
+/// playback that applies it.</summary>
 public enum ConflictPolicy
 {
     /// <summary>The earlier holder keeps the key, and <see cref="IndexConflictException"/> is thrown once the world operation that made

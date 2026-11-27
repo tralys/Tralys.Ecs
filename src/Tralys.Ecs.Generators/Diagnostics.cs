@@ -131,22 +131,6 @@ static class Diagnostics
         "Parameter '{0}' of query '{1}' takes ref to {2}; take it by in and write it with Set"
     );
 
-    public static readonly DiagnosticDescriptor StructuralWriteInQuery = Make(
-        "TECS0045",
-        Queries,
-        DiagnosticSeverity.Error,
-        "Query body or collect predicate changes structure",
-        "'{0}' changes structure inside the query '{1}'; {2}"
-    );
-
-    public static readonly DiagnosticDescriptor WorldWriteInParallelQuery = Make(
-        "TECS0017",
-        Queries,
-        DiagnosticSeverity.Error,
-        "Parallel query body changes the world directly",
-        "'{0}' changes the world inside the parallel query '{1}'; {2}"
-    );
-
     public static readonly DiagnosticDescriptor RefParameterNeverWritten = Make(
         "TECS0018",
         Queries,
@@ -159,8 +143,8 @@ static class Diagnostics
         "TECS0019",
         Usage,
         DiagnosticSeverity.Warning,
-        "Ref from the world used after a structural change",
-        "'{0}' was taken from the world before '{1}' changed its structure, so the ref may point at another entity's row; take it again after the change"
+        "Ref from the world used after a call that can move its storage",
+        "'{0}' was taken from the world before '{1}', which can move the storage it points into, so it may read another entity's row; take it again after that call, or copy the value out with TryGet"
     );
 
     public static readonly DiagnosticDescriptor InvalidQuery = Make(
@@ -267,14 +251,6 @@ static class Diagnostics
         "Playback point '{0}' of '{1}' {2}"
     );
 
-    public static readonly DiagnosticDescriptor SettledApiInQuery = Make(
-        "TECS0038",
-        Queries,
-        DiagnosticSeverity.Error,
-        "Query body calls an API that needs a settled world",
-        "'{0}' needs a settled world, so it always throws inside the query '{1}'; call it outside any iteration"
-    );
-
     public static readonly DiagnosticDescriptor RowsWithoutKey = Make(
         "TECS0039",
         Declarations,
@@ -307,19 +283,29 @@ static class Diagnostics
         "'{0}' {1}"
     );
 
-    public static readonly DiagnosticDescriptor OwnerThreadApiInParallelQuery = Make(
-        "TECS0043",
-        Queries,
+    public static readonly DiagnosticDescriptor EffectMismatch = Make(
+        "TECS0047",
+        Declarations,
         DiagnosticSeverity.Error,
-        "Parallel query body uses world scratch",
-        "'{0}' uses world scratch, which belongs to the owner thread, so it throws inside the parallel query '{1}'; call it before or after the run"
+        "Declared effects differ from what the member can reach",
+        "'{0}' declares {1}, but its body can reach {2}{3}",
+        WellKnownDiagnosticTags.CompilationEnd
+    );
+
+    public static readonly DiagnosticDescriptor UndeclaredSeam = Make(
+        "TECS0048",
+        Declarations,
+        DiagnosticSeverity.Error,
+        "Code consumers write is reached without a declared effect",
+        "'{0}' {1}",
+        WellKnownDiagnosticTags.CompilationEnd
     );
 
     public static readonly DiagnosticDescriptor MutationThroughReadonlyReference = Make(
         "TECS0046",
         Usage,
         DiagnosticSeverity.Error,
-        "Member that is not readonly called through a readonly reference",
+        "Method or setter that is not readonly called through a readonly reference",
         "'{0}' is not readonly, so through the readonly reference '{1}' it changes a copy and the write is lost; write through Edit, or mark '{0}' readonly if it changes nothing"
     );
 }

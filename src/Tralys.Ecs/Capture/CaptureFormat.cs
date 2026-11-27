@@ -8,7 +8,7 @@ namespace Tralys.Ecs;
 internal static class CaptureFormat
 {
     const uint Magic = 0x49434C54;
-    const ushort Version = 1;
+    const ushort Version = 2;
 
     public static void Write(CaptureImage image, Stream stream)
     {
@@ -35,7 +35,7 @@ internal static class CaptureFormat
             var descriptor = registry[type];
             writer.Write(descriptor.Name);
             writer.Write(descriptor.SchemaVersion);
-            writer.Write(Shape(descriptor, registry));
+            writer.Write(Shape(descriptor));
         }
 
         writer.Write(image.Sources.Length);
@@ -143,7 +143,7 @@ internal static class CaptureFormat
         | ComponentTraits.PresenceMask;
 
     // Restore reads a value through its layout, kind, storage and RestoredTraits, so any of them changing makes old bytes unreadable.
-    internal static ulong Shape(ComponentDescriptor descriptor, Registry registry)
+    internal static ulong Shape(ComponentDescriptor descriptor)
     {
         var hash = 14695981039346656037UL;
         void Mix(ulong value)
@@ -156,17 +156,8 @@ internal static class CaptureFormat
         Mix((ulong)(descriptor.Traits & RestoredTraits));
         Mix((ulong)descriptor.RelationTraits);
         Mix((ulong)descriptor.Size);
+        Mix((ulong)descriptor.SchemaVersion);
         Mix(descriptor.LayoutHash);
-        var requires = new List<string>();
-        foreach (var required in descriptor.Requires)
-            requires.Add(registry[required].Name);
-        requires.Sort(StringComparer.Ordinal);
-        foreach (var name in requires)
-        {
-            Mix((ulong)name.Length);
-            foreach (var c in name)
-                Mix(c);
-        }
         return hash;
     }
 
@@ -266,7 +257,7 @@ internal static class CaptureFormat
             var pages = new CapturePage[Count()];
             for (var p = 0; p < pages.Length; p++)
             {
-                var detached = reader.ReadBoolean();
+                var detached = Bool();
                 var locals = Locals();
                 var pageTypes = TypeList();
                 var columnTypes = TypeList();
@@ -274,7 +265,7 @@ internal static class CaptureFormat
                 for (var c = 0; c < columns.Length; c++)
                     columns[c] = Values(columnTypes[c], locals.Length);
                 var enableTypes = TypeList();
-                var enabled = Array<bool>();
+                var enabled = Bools();
                 if (enabled.Length != (long)locals.Length * enableTypes.Length)
                     throw Corrupt();
                 pages[p] = new CapturePage(
@@ -285,7 +276,7 @@ internal static class CaptureFormat
                     enableTypes,
                     enabled,
                     locals,
-                    Array<bool>()
+                    Bools()
                 );
             }
 
@@ -362,7 +353,7 @@ internal static class CaptureFormat
                 throw new InvalidDataException(
                     $"The capture image holds {name} at schema version {schemaVersion}; this registry declares version {descriptor.SchemaVersion}."
                 );
-            if (Shape(descriptor, registry) != shape)
+            if (Shape(descriptor) != shape)
                 throw new InvalidDataException(
                     $"{name} changed layout since the capture image was written."
                 );
@@ -400,6 +391,19 @@ internal static class CaptureFormat
                 throw new EndOfStreamException();
             var values = new T[count];
             reader.BaseStream.ReadExactly(MemoryMarshal.AsBytes(values.AsSpan()));
+            return values;
+        }
+
+        bool Bool() => reader.ReadByte() is var value and <= 1 ? value == 1 : throw Corrupt();
+
+        bool[] Bools()
+        {
+            var values = Array<bool>();
+            foreach (var value in MemoryMarshal.AsBytes(values.AsSpan()))
+            {
+                if (value > 1)
+                    throw Corrupt();
+            }
             return values;
         }
 
@@ -457,6 +461,7 @@ internal static class CaptureFormat
         readonly bool[] placed = new bool[image.Sources.Length];
         readonly Dictionary<int, int> holders = [];
         readonly HashSet<int> recorded = [];
+        readonly HashSet<(int Local, int Type)> held = [];
 
         public void Run()
         {
@@ -481,11 +486,26 @@ internal static class CaptureFormat
                     Reference(target);
                 Values(record.Type, record.Payloads);
             }
-            var children = new HashSet<int>();
+            var parents = new int[image.Sources.Length];
+            Array.Fill(parents, -1);
             foreach (var link in image.Parents)
             {
-                Require(children.Add(link.Child) && !link.Parent.IsDefault);
+                Require(parents[link.Child] < 0 && !link.Parent.IsDefault);
                 Reference(link.Parent);
+                parents[link.Child] = ImageRef.TryLocal(link.Parent, out var local)
+                    ? local
+                    : image.Sources.Length;
+            }
+            Acyclic(parents);
+            foreach (var (local, type) in held)
+            {
+                foreach (var required in registry[type].Requires)
+                {
+                    if (!held.Contains((local, required)))
+                        throw new InvalidDataException(
+                            $"The capture image holds {registry[type].Name} without {registry[required].Name}, which it requires; the requirement was added since the image was written."
+                        );
+                }
             }
             foreach (var record in image.Rows)
             {
@@ -517,6 +537,8 @@ internal static class CaptureFormat
                 if (descriptor.IsEnableable)
                     enables.Add(type);
                 Hold(type, page.Locals.Length);
+                foreach (var local in page.Locals)
+                    held.Add((local, type));
             }
             Require(
                 columns.SetEquals(page.ColumnTypes) && columns.Count == page.ColumnTypes.Length
@@ -539,8 +561,27 @@ internal static class CaptureFormat
             Require(descriptor.Kind == kind && descriptor.IsSparse == sparse && recorded.Add(type));
             var seen = new HashSet<int>();
             foreach (var local in locals)
+            {
                 Require(seen.Add(local));
+                held.Add((local, type));
+            }
             Hold(type, locals.Length);
+        }
+
+        static void Acyclic(int[] parents)
+        {
+            var walked = new int[parents.Length];
+            for (var start = 0; start < parents.Length; start++)
+            {
+                for (var at = start; at < parents.Length && walked[at] == 0; at = parents[at])
+                {
+                    walked[at] = start + 1;
+                    if (parents[at] >= 0 && parents[at] < parents.Length)
+                        Require(walked[parents[at]] != start + 1);
+                    else
+                        break;
+                }
+            }
         }
 
         void Hold(int type, int count)

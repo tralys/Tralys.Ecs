@@ -9,7 +9,12 @@ namespace Tralys.Ecs.Aot.Smoke;
 /// <summary>The components Tralys.Ecs.Aot.Smoke declares. Pass <c>All</c> to <c>Registry.Build</c>.</summary>
 public static class EcsModule
 {
-    public static readonly global::Tralys.Ecs.ComponentModule Module = new("Tralys.Ecs.Aot.Smoke", []);
+    #if DEBUG
+    const bool Optimized = false;
+    #else
+    const bool Optimized = true;
+    #endif
+    public static readonly global::Tralys.Ecs.ComponentModule Module = new("Tralys.Ecs.Aot.Smoke", [], optimized: Optimized);
 
     /// <summary>This assembly's module and those of every assembly it references, for <c>Registry.Build(EcsModule.All)</c>.</summary>
     public static readonly global::Tralys.Ecs.ComponentModule[] All = [Module, .. global::Tralys.Ecs.Downstream.Fixture.EcsModule.All];

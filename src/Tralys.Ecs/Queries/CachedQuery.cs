@@ -4,7 +4,8 @@ using System.Runtime.CompilerServices;
 namespace Tralys.Ecs;
 
 /// <summary>A query bound to one world. Archetypes are matched as they appear, so a run only walks archetypes that match. Serial runs open a
-/// walk in which a structural change throws; partitioned runs record theirs through each chunk's <see cref="ChunkView.Commands"/>.</summary>
+/// walk in which structural changes record and apply when the outermost walk closes; partitioned runs record theirs through each chunk's
+/// <see cref="ChunkView.Commands"/>.</summary>
 public sealed class CachedQuery
 {
     internal readonly World world;
@@ -70,15 +71,16 @@ public sealed class CachedQuery
         {
             var archetype = entry.Archetype;
             for (var at = 0; at < archetype.Count; at += archetype.ChunkCapacity)
-                total += BitOperations.PopCount(
+                total += new RowSet(
                     RowMask(
                         entry,
                         at,
                         Math.Min(archetype.ChunkCapacity, archetype.Count - at),
                         aligned: true,
                         since
-                    )
-                );
+                    ),
+                    new RowFilter(this, archetype, entry.Match, at)
+                ).Count;
         }
         return total;
     }
@@ -246,6 +248,60 @@ public sealed class CachedQuery
         return true;
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal bool Skips(Archetype archetype, ArchetypeMatch match, int row) =>
+        archetype.IsPending(row)
+            ? !StillMatches(archetype, match, row)
+            : world.overlay.HasLifecycle && RecordedAway(archetype.Entities[row]);
+
+    bool RecordedAway(Entity entity) =>
+        world.AwayAsRecorded(entity, dying: !desc.IncludePending, detached: !desc.IncludeDetached);
+
+    bool StillMatches(Archetype archetype, ArchetypeMatch match, int row)
+    {
+        var overlay = world.overlay;
+        var index = archetype.Entities[row].Index;
+        if (overlay.HasLifecycle && RecordedAway(archetype.Entities[row]))
+            return false;
+        var terms = desc.Terms;
+        for (var t = 0; t < terms.Length; t++)
+        {
+            var kind = terms[t].Kind;
+            if (
+                kind is TermKind.Optional or TermKind.AnyOf
+                || !overlay.TryGet(index, shape.Types[t], out _, out var enabled, out _)
+            )
+                continue;
+            var holds = enabled || Inherits(archetype, t, row);
+            if (kind == TermKind.Without ? holds : !holds)
+                return false;
+        }
+        foreach (var group in shape.Groups)
+        {
+            var any = false;
+            foreach (var t in group.Members)
+            {
+                any =
+                    overlay.TryGet(index, shape.Types[t], out _, out var enabled, out _)
+                        ? enabled || Inherits(archetype, t, row)
+                    : shape.Classes[t] is StorageClass.Sparse or StorageClass.SparseTag
+                        ? SparseHas(t, index)
+                    : (
+                        match.Present[t]
+                        && (match.Enable[t] < 0 || archetype.IsEnabled(match.Enable[t], row))
+                    ) || Inherits(archetype, t, row);
+                if (any)
+                    break;
+            }
+            if (!any)
+                return false;
+        }
+        return true;
+    }
+
+    bool Inherits(Archetype archetype, int term, int row) =>
+        shape.Inherited[term] > 0 && archetype.HasAncestor(shape.Inherited[term], row);
+
     bool SparseHas(int term, uint index)
     {
         var type = shape.Types[term];
@@ -311,10 +367,15 @@ public sealed class CachedQuery
             }
             completed = !cursor.Pending;
         }
+        catch (Exception error)
+        {
+            cursor.Fault(error);
+            throw;
+        }
         finally
         {
-            cursor.Dispose();
             Finish(completed, runVersion);
+            cursor.Dispose();
         }
     }
 
@@ -362,17 +423,29 @@ public sealed class CachedQuery
             }
             keys.Span[..count].Sort(entities.Span[..count]);
             var structural = world.structuralCount;
-            using var iteration = world.BeginIteration();
-            for (var i = 0; i < count; i++)
+            var iteration = world.BeginIteration();
+            try
             {
-                if (!SingleView(entities.Span[i], i, since, out var view, count: false))
-                    continue;
-                kernel.Execute(ref view);
-                CheckStructural(structural);
-                if (view.stopped)
-                    return;
+                for (var i = 0; i < count; i++)
+                {
+                    if (!SingleView(entities.Span[i], i, since, out var view, count: false))
+                        continue;
+                    kernel.Execute(ref view);
+                    CheckStructural(structural);
+                    if (view.stopped)
+                        return;
+                }
+                completed = true;
             }
-            completed = true;
+            catch (Exception error)
+            {
+                iteration.Fault(error);
+                throw;
+            }
+            finally
+            {
+                iteration.Dispose();
+            }
         }
         finally
         {
@@ -397,15 +470,27 @@ public sealed class CachedQuery
     {
         world.CheckWritable();
         var structural = world.structuralCount;
-        using var iteration = world.BeginIteration();
-        for (var i = 0; i < entities.Length; i++)
+        var iteration = world.BeginIteration();
+        try
         {
-            if (!SingleView(entities[i], i, Since, out var view))
-                continue;
-            kernel.Execute(ref view);
-            CheckStructural(structural);
-            if (view.stopped)
-                return;
+            for (var i = 0; i < entities.Length; i++)
+            {
+                if (!SingleView(entities[i], i, Since, out var view))
+                    continue;
+                kernel.Execute(ref view);
+                CheckStructural(structural);
+                if (view.stopped)
+                    return;
+            }
+        }
+        catch (Exception error)
+        {
+            iteration.Fault(error);
+            throw;
+        }
+        finally
+        {
+            iteration.Dispose();
         }
     }
 
@@ -442,10 +527,15 @@ public sealed class CachedQuery
             }
             completed = !cursor.Pending;
         }
+        catch (Exception error)
+        {
+            cursor.Fault(error);
+            throw;
+        }
         finally
         {
-            cursor.Dispose();
             Finish(completed, runVersion);
+            cursor.Dispose();
         }
         return result;
     }
@@ -471,22 +561,34 @@ public sealed class CachedQuery
         world.CheckWritable();
         var structural = world.structuralCount;
         var result = TAccumulator.Identity;
-        using var iteration = world.BeginIteration();
-        for (var i = 0; i < entities.Length; i++)
+        var iteration = world.BeginIteration();
+        try
         {
-            if (!SingleView(entities[i], i, Since, out var view))
-                continue;
-            var partial = TAccumulator.Identity;
-            kernel.Execute(ref view, ref partial);
-            CheckStructural(structural);
-            result = TAccumulator.Combine(result, partial);
-            if (view.stopped)
-                break;
+            for (var i = 0; i < entities.Length; i++)
+            {
+                if (!SingleView(entities[i], i, Since, out var view))
+                    continue;
+                var partial = TAccumulator.Identity;
+                kernel.Execute(ref view, ref partial);
+                CheckStructural(structural);
+                result = TAccumulator.Combine(result, partial);
+                if (view.stopped)
+                    break;
+            }
+        }
+        catch (Exception error)
+        {
+            iteration.Fault(error);
+            throw;
+        }
+        finally
+        {
+            iteration.Dispose();
         }
         return result;
     }
 
-    /// <summary>Collects the entities <paramref name="kernel"/> marks in a serial walk that changes no structure, closes the walk, then
+    /// <summary>Collects the entities <paramref name="kernel"/> marks in a serial walk, closes the walk, applying what it recorded, then
     /// acts on each one still eligible, with immediate structural changes allowed. With <see cref="World.Faults"/> set, an act that throws
     /// is reported and the rest still run.</summary>
     public void Collect<TKernel, TAction>(ref TKernel kernel, ref TAction action)
@@ -638,14 +740,14 @@ public sealed class CachedQuery
             world.chunksVisited += buffer.chunksVisited;
             world.chunksSkipped += buffer.chunksSkipped;
             buffer.chunksVisited = buffer.chunksSkipped = 0;
-            if (buffer.IsEmpty || !completed)
-                world.ReturnBuffer(buffer);
-            else
+            if (completed)
                 world.Submit(buffer);
+            else
+                world.ReturnBuffer(buffer);
         }
         rented.Clear();
         rentedWorkers = 0;
-        // Serial commands recorded later in the same system run play back after this run's chunk buffers.
+        // Serial commands recorded later in the same system run play back after this run's chunk buffers; a walk's apply before them, as it closes.
         world.runSequence++;
         return conflict;
     }
@@ -769,8 +871,8 @@ public sealed class CachedQuery
             );
     }
 
-    /// <summary>Walks matched chunks serially, for hand-written loops, in which a structural change throws. Disposing the enumerator closes
-    /// the walk.</summary>
+    /// <summary>Walks matched chunks serially, for hand-written loops, in which structural changes record. Disposing the enumerator closes
+    /// the walk, which applies them if it is the outermost.</summary>
     public ChunkEnumerator GetEnumerator() => new(this);
 
     /// <summary>Walks the matched chunks of a serial run; disposing it closes the iteration.</summary>
@@ -802,11 +904,14 @@ public sealed class CachedQuery
             return false;
         }
 
-        /// <summary>Closes the iteration, advancing <c>Changed</c> watermarks only if the walk completed, and throws <see cref="IndexConflictException"/> for a unique-key conflict it left.</summary>
+        /// <summary>Closes the iteration, advancing <c>Changed</c> watermarks only if the walk completed, applies what the outermost walk
+        /// recorded, and throws <see cref="IndexConflictException"/> for a unique-key conflict it left, or what applying the records threw, as
+        /// <see cref="World.Playback"/> does. A <c>foreach</c> cannot tell it the body threw, so that throw replaces the body's exception;
+        /// <see cref="Run{TKernel}"/> throws both.</summary>
         public void Dispose()
         {
-            cursor.Dispose();
             query.Finish(completed, runVersion);
+            cursor.Dispose();
             query.world.ThrowIndexConflicts();
         }
     }
@@ -901,6 +1006,8 @@ public sealed class CachedQuery
             view = default;
             return false;
         }
+
+        public void Fault(Exception error) => iteration.Fault(error);
 
         public void Dispose()
         {

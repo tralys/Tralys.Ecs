@@ -3,13 +3,21 @@ using System.Runtime.CompilerServices;
 namespace Tralys.Ecs;
 
 /// <summary>The descriptors one assembly declares; the generator emits one per assembly.</summary>
-public sealed class ComponentModule(string assembly, ComponentDescriptor[] descriptors)
+public sealed class ComponentModule(
+    string assembly,
+    ComponentDescriptor[] descriptors,
+    bool optimized
+)
 {
     /// <summary>The name of the declaring assembly.</summary>
     public string Assembly { get; } = assembly;
 
     /// <summary>The descriptors the assembly declares.</summary>
     public IReadOnlyList<ComponentDescriptor> Descriptors { get; } = descriptors;
+
+    /// <summary>Whether the declaring assembly was compiled without the <c>DEBUG</c> symbol; a registry with a module compiled with it turns
+    /// <see cref="WorldOptions.CheckBorrows"/> on by default.</summary>
+    public bool Optimized { get; } = optimized;
 }
 
 /// <summary>An immutable set of component modules. Dense indices are process-wide, so worlds from different registries agree on them.</summary>
@@ -22,11 +30,12 @@ public sealed class Registry
     readonly ComponentDescriptor[] sorted;
     readonly Dictionary<string, ComponentDescriptor> byName;
 
-    Registry(ComponentDescriptor?[] byIndex, ComponentDescriptor[] sorted)
+    Registry(ComponentDescriptor?[] byIndex, ComponentDescriptor[] sorted, bool optimized)
     {
         this.byIndex = byIndex;
         this.sorted = sorted;
         byName = sorted.ToDictionary(d => d.Name, StringComparer.Ordinal);
+        Optimized = optimized;
     }
 
     /// <summary>A registry of every descriptor in <paramref name="modules"/>, counting a repeated descriptor once; throws <see cref="InvalidOperationException"/> for a type name two modules declare or a missing required type, <see cref="NotSupportedException"/> for a sparse enableable type.</summary>
@@ -34,8 +43,10 @@ public sealed class Registry
     {
         var seen = new HashSet<ComponentDescriptor>(ReferenceEqualityComparer.Instance);
         var byName = new Dictionary<string, ComponentDescriptor>(StringComparer.Ordinal);
+        var optimized = true;
         foreach (var module in modules)
         {
+            optimized &= module.Optimized;
             foreach (var descriptor in module.Descriptors)
             {
                 if (!seen.Add(descriptor))
@@ -79,7 +90,7 @@ public sealed class Registry
             descriptor.requires = resolved;
         }
 
-        return new Registry(byIndex, sorted);
+        return new Registry(byIndex, sorted, optimized);
     }
 
     static unsafe int Bind(ComponentDescriptor descriptor)
@@ -101,6 +112,8 @@ public sealed class Registry
     }
 
     internal int IndexBound => byIndex.Length;
+
+    internal bool Optimized { get; }
 
     /// <summary>Every descriptor, in ordinal name order.</summary>
     public ReadOnlySpan<ComponentDescriptor> Descriptors => sorted;

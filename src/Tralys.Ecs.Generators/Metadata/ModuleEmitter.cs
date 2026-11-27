@@ -100,16 +100,24 @@ static class ModuleEmitter
             string.Concat(model.Containers.Items.Select(c => c.Name)) + model.DeclarationName;
         var name = Symbols.RowsAccessor(model.DeclarationName);
         var arguments = $"<{key}, {model.FullName}>";
+        var read = Effects.Declare(Effects.None);
         using (writer.Block($"{model.AccessorVisibility} static class {owner}RowsAccess"))
         {
+            writer.Line(read);
             writer.Line(
                 $"public static global::Tralys.Ecs.Rows{arguments} {name}(this global::Tralys.Ecs.World world, global::Tralys.Ecs.Entity entity) => global::Tralys.Ecs.Generated.Plumbing.Rows{arguments}(world, entity);"
             );
+            writer.Line(read);
             writer.Line(
                 $"public static global::Tralys.Ecs.CommandRows{arguments} {name}(this global::Tralys.Ecs.Commands commands, global::Tralys.Ecs.Entity entity) => global::Tralys.Ecs.Generated.Plumbing.Rows{arguments}(commands, entity);"
             );
+            writer.Line(read);
             writer.Line(
                 $"public static global::Tralys.Ecs.Rows{arguments} {name}(this global::Tralys.Ecs.WorldEntity entity) => global::Tralys.Ecs.Generated.Plumbing.Rows{arguments}(entity);"
+            );
+            writer.Line(read);
+            writer.Line(
+                $"public static global::Tralys.Ecs.RowsReader{arguments} {name}(this global::Tralys.Ecs.WorldReader reader, global::Tralys.Ecs.Entity entity) => reader.Rows{arguments}(entity);"
             );
         }
     }
@@ -278,8 +286,13 @@ static class ModuleEmitter
                 calls.Add($"D{n++}()");
             foreach (var instance in instances)
                 calls.Add($"D{n++}()");
+            writer.Line("#if DEBUG");
+            writer.Line("const bool Optimized = false;");
+            writer.Line("#else");
+            writer.Line("const bool Optimized = true;");
+            writer.Line("#endif");
             writer.Line(
-                $"public static readonly global::Tralys.Ecs.ComponentModule Module = new(\"{assembly}\", [{string.Join(", ", calls)}]);"
+                $"public static readonly global::Tralys.Ecs.ComponentModule Module = new(\"{assembly}\", [{string.Join(", ", calls)}], optimized: Optimized);"
             );
             writer.Line();
             writer.Line(

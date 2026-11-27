@@ -124,7 +124,7 @@ public sealed class ChangedRowsTests
         var read = world.Changes.Sample(expected.Cursor);
         if (!walk)
         {
-            world.Changes.Commit(expected.Cursor, read.Until);
+            world.Changes.Commit(expected.Cursor, read.Window);
             expected.Stamped.Clear();
             expected.Added.Clear();
             return;
@@ -149,7 +149,7 @@ public sealed class ChangedRowsTests
                     + $"missing {string.Join(",", expected.Stamped.Except(stamped))}, extra {string.Join(",", stamped.Except(expected.Stamped))}, "
                     + $"added {string.Join(",", added)} vs {string.Join(",", expected.Added)}"
             );
-        world.Changes.Commit(expected.Cursor, read.Until);
+        world.Changes.Commit(expected.Cursor, read.Window);
         expected.Stamped.Clear();
         expected.Added.Clear();
     }
@@ -272,7 +272,27 @@ public sealed class ChangedRowsTests
         var owners = new List<Entity>();
         foreach (var row in sample.ChangedRows<int, Effect>())
             owners.Add(row.Entity);
-        world.Changes.Commit(cursor, sample.Until);
+        world.Changes.Commit(cursor, sample.Window);
         return owners;
+    }
+
+    [Test]
+    public async Task A_tracked_row_write_recorded_then_played_back_inside_untracked_still_stamps()
+    {
+        using var world = TestWorlds.Create();
+        var cursor = world.Changes.Register("rows");
+        Entity owner;
+        using (world.BeginDelivery())
+        {
+            owner = world.Create();
+            world.EffectRows(owner).Set(new Effect { Kind = 1 });
+        }
+        using (world.Untracked())
+            world.Playback();
+
+        var reported = new List<Entity>();
+        foreach (var row in world.Changes.Sample(cursor).ChangedRows<int, Effect>())
+            reported.Add(row.Entity);
+        await Assert.That(reported).IsEquivalentTo([owner]);
     }
 }

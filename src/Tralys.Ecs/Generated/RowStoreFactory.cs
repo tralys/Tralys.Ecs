@@ -3,6 +3,7 @@ namespace Tralys.Ecs.Generated;
 /// <summary>Creates the per-world row store of one row type; emitted by the generator because it needs the key type.</summary>
 public readonly unsafe struct RowStoreFactory
 {
+    [Effect(Effects.None)]
     readonly delegate* <World, int, RowStore> create;
 
     RowStoreFactory(delegate* <World, int, RowStore> create) => this.create = create;

@@ -30,6 +30,7 @@ static class IndexEmitter
     {
         var owner =
             string.Concat(model.Containers.Items.Select(c => c.Name)) + model.DeclarationName;
+        var read = Effects.Declare(Effects.None);
         using (writer.Block($"{model.AccessorVisibility} static class {owner}Indexes"))
         {
             foreach (var index in model.Indexes.Items)
@@ -37,9 +38,11 @@ static class IndexEmitter
                 var view = $"global::Tralys.Ecs.{Views[index.Kind]}<{index.KeyType}>";
                 var call =
                     $"global::Tralys.Ecs.Generated.Plumbing.{Views[index.Kind]}Of<{model.FullName}, {index.KeyType}>";
+                writer.Line(read);
                 writer.Line(
                     $"public static {view} {model.DeclarationName}{index.Name}(this global::Tralys.Ecs.World world) => {call}(world, {index.Ordinal});"
                 );
+                writer.Line(read);
                 writer.Line(
                     $"public static {view} {index.Name}(this global::Tralys.Ecs.IndexLookup<{model.FullName}> lookup) => "
                         + $"{call}(global::Tralys.Ecs.Generated.Plumbing.WorldOf(lookup), {index.Ordinal});"

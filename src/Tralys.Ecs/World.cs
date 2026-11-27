@@ -28,10 +28,22 @@ public readonly record struct WorldOptions
     /// included, and reports those naming a dead entity to <see cref="World.ReferenceFaults"/>. For tests and debug runs: the walk visits
     /// every stored value.</summary>
     public bool VerifyReferences { get; init; }
+
+    /// <summary>After every playback and every immediate destroy, cancel, reparent, edge write, detach or reattach, checks the world's
+    /// structural invariants and throws <see cref="InvalidOperationException"/> at the first one broken: no live source holds a
+    /// <see cref="TargetPolicy.Throw"/> edge onto a dying or released target, each entity's partition and pending-destroy bits follow its
+    /// own flags and its parent's, and a finalisation releases exactly the entities it planned to. For tests and debug runs: each check
+    /// walks every entity and edge.</summary>
+    public bool VerifyInvariants { get; init; }
+
+    /// <summary>Makes each read through an <see cref="Optional{T}"/> from <see cref="World.Find{T}"/> or <c>Rows.Find</c> throw once the
+    /// storage it points into has moved. Null turns it on when a module of the registry was compiled with <c>DEBUG</c> defined. For tests and
+    /// debug runs: every such read compares a move counter.</summary>
+    public bool? CheckBorrows { get; init; }
 }
 
 /// <summary>A set of entities and their components. Not thread-safe: one owner thread mutates it.</summary>
-public sealed partial class World : IDisposable
+public sealed partial class World : IDisposable, IMoveCount
 {
     internal readonly Registry registry;
     internal readonly RegistryLayout layout;
@@ -43,8 +55,11 @@ public sealed partial class World : IDisposable
     internal readonly SparseTagStorage?[] sparseTags;
     readonly int chunkCapacity;
     internal readonly IChunkExecutor executor;
+
+    [Effect(Effects.MovesEntities)]
     internal int structuralCount;
     internal int parallelDepth;
+    internal readonly bool checkBorrows;
     CachedQuery?[] queries = [];
     internal readonly List<CachedQuery> liveQueries = [];
 
@@ -77,6 +92,8 @@ public sealed partial class World : IDisposable
         if (options.AttributedLogCapacity > 0)
             attributed = new AttributedLog(options.AttributedLogCapacity);
         verifyReferences = options.VerifyReferences;
+        verifyInvariants = options.VerifyInvariants;
+        checkBorrows = options.CheckBorrows ?? !registry.Optimized;
         root = ArchetypeFor(ArchetypeSignature.Empty(registry.IndexBound));
         changes = new ChangeTracking(
             this,
@@ -88,13 +105,13 @@ public sealed partial class World : IDisposable
         stage = new CommandBuffer(this, parallel: false);
         buffersById.Add(stage);
         overlay = new PendingOverlay();
-        BindToCurrentThread();
+        ownerThread = Environment.CurrentManagedThreadId;
     }
 
     /// <summary>An empty world over <paramref name="registry"/>, owned by the calling thread.</summary>
     /// <exception cref="ArgumentException"><see cref="WorldOptions.ChunkCapacity"/> is neither zero nor a power of two up to 64, or
     /// <see cref="WorldOptions.AttributedLogCapacity"/> is negative.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.None)]
     public static World Create(Registry registry, in WorldOptions options = default) =>
         new(registry, options);
 
@@ -124,10 +141,14 @@ public sealed partial class World : IDisposable
         return query;
     }
 
-    /// <summary>Drops every archetype's rows and chunk storage; do not use the world afterwards.</summary>
-    [Effect(Effects.None)]
+    /// <summary>Drops every archetype's rows and chunk storage; do not use the world afterwards. Throws while a query iterates or
+    /// observers run.</summary>
+    [Effect(Effects.MovesEntities | Effects.Mutates | Effects.Settled)]
     public void Dispose()
     {
+        CheckSerial();
+        CheckNotIterating(nameof(Dispose));
+        structuralCount++;
         foreach (var archetype in archetypes)
         {
             archetype.Release();
@@ -142,6 +163,7 @@ public sealed partial class World : IDisposable
         var archetype = new Archetype(archetypes.Count, signature, registry, chunkCapacity, this);
         archetypes.Add(archetype);
         bySignature.Add(signature, archetype);
+        partitionsUsed |= signature.Detached;
         foreach (var query in liveQueries)
             query.OnArchetype(archetype);
         return archetype;
@@ -246,6 +268,7 @@ public sealed partial class World : IDisposable
     {
         var row = target.AllocateRow(entity);
         target.ClearStamps(row);
+        target.SetPending(row, slot.Pending);
         slot.Archetype = target;
         slot.Row = row;
         slot.Detached = target.Detached;
@@ -285,6 +308,7 @@ public sealed partial class World : IDisposable
         foreach (var t in map.FreshTracked)
             target.ClearStamps(t, row);
         target.SetPendingDestroy(row, source.IsPendingDestroy(fromRow));
+        target.SetPending(row, source.IsPending(fromRow));
         if (hierarchy.EverUsed)
             target.CopyAncestors(row, source, fromRow);
 
@@ -297,6 +321,22 @@ public sealed partial class World : IDisposable
             RefreshChildren(entity);
     }
 
+    int IMoveCount.MoveCount => structuralCount;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void MarkPending(ref EntitySlot slot)
+    {
+        slot.Pending = true;
+        slot.Archetype?.SetPending(slot.Row, true);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void ClearPending(ref EntitySlot slot)
+    {
+        slot.Pending = false;
+        slot.Archetype?.SetPending(slot.Row, false);
+    }
+
     internal void Vacate(Archetype archetype, int row)
     {
         if (archetype.RemoveRow(row) is { } moved)
@@ -305,16 +345,25 @@ public sealed partial class World : IDisposable
     }
 
     /// <summary>Releases the chunk storage of every empty archetype, which otherwise keeps the capacity it grew to so that entities
-    /// passing through it allocate nothing; the next entity to enter one regrows it. Throws inside a walk or a partitioned query.</summary>
-    [Effect(Effects.Mutates)]
+    /// passing through it allocate nothing; the next entity to enter one regrows it. Throws while a query iterates or observers run.</summary>
+    [Effect(Effects.Mutates | Effects.Settled)]
     public void TrimExcess()
     {
         CheckWritable();
-        CheckStructural();
+        CheckNotIterating(nameof(TrimExcess));
         foreach (var archetype in archetypes)
         {
             if (archetype.Count == 0 && archetype.Capacity > 0 && archetype != root)
                 archetype.TrimStorage();
         }
+    }
+
+    [Effect(Effects.Settled)]
+    void CheckNotIterating(string operation)
+    {
+        if (iterationDepth > 0)
+            throw new InvalidOperationException(
+                $"{operation} needs a settled world, and a query is iterating or observers are running; call it after the run."
+            );
     }
 }

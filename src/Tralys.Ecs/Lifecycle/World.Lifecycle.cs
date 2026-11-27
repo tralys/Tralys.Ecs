@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Tralys.Ecs;
 
@@ -6,20 +7,17 @@ public sealed partial class World
 {
     readonly List<Entity> pendingDestroys = [];
     readonly List<Entity> finalising = [];
-    readonly List<(Entity Entity, LifecycleState State)> inheriting = [];
-    readonly List<Entity> restored = [];
-    byte[] gathered = [];
-    const byte Gathered = 1;
-    const byte Reached = 2;
+    readonly List<Entity> cascadeRoots = [];
+
+    bool planFrozen;
 
     static readonly LogKinds SpawnReports = LogKinds.Of(LogKind.Added);
 
     readonly List<BundleInfo?> bundles = [];
-    internal bool extracting;
 
-    /// <summary>Creates an entity. Inside an observer it is reserved: usable by handle at once, matched by queries after playback.</summary>
-    /// <exception cref="InvalidOperationException">A serial query body is running.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <summary>Creates an entity. Inside a query walk or an observer it is reserved: usable by handle at once, matched by queries once the
+    /// walk closes or after playback.</summary>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public Entity Create([CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
     {
         At(file, line);
@@ -29,12 +27,11 @@ public sealed partial class World
 
     internal Entity NewEntity()
     {
-        CheckStructural();
-        if (iterationDepth > 0)
+        Structural();
+        if (RecordsCreate)
         {
             var reserved = allocator.Allocate(LifecycleState.Reserved);
-            allocator.Slots[reserved.Index].Pending = true;
-            stage.Record(CommandKind.Create, reserved);
+            Stage(CommandKind.Create, reserved);
             return reserved;
         }
         var entity = allocator.Allocate(LifecycleState.Alive);
@@ -43,10 +40,10 @@ public sealed partial class World
         return entity;
     }
 
-    /// <summary>Creates an entity with a whole bundle in one archetype move; inside an observer it is reserved, as <see cref="Create(string, int)"/>
-    /// makes it.</summary>
-    /// <exception cref="InvalidOperationException">A serial query body is running, or a singleton in the bundle is held.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <summary>Creates an entity with a whole bundle in one archetype move; inside a query walk or an observer it is reserved, as
+    /// <see cref="Create(string, int)"/> makes it.</summary>
+    /// <exception cref="InvalidOperationException">A singleton in the bundle is held.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public Entity Create<TBundle>(
         in TBundle bundle,
         [CallerFilePath] string file = "",
@@ -56,7 +53,7 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
-        CheckStructural();
+        Structural();
         var info = BundleFor<TBundle>();
         foreach (var type in info.Singletons)
         {
@@ -65,7 +62,7 @@ public sealed partial class World
                     SingletonConflict(type, holder, "a new entity")
                 );
         }
-        if (iterationDepth > 0)
+        if (RecordsCreate)
         {
             var reserved = NewEntity();
             var recorder = new BundleWriter(stage, reserved);
@@ -73,16 +70,10 @@ public sealed partial class World
             foreach (var type in info.SignatureTypes)
             {
                 if (layout.Class[type] == StorageClass.SignatureTag)
-                {
-                    stage.Record(CommandKind.Set, reserved, type, -1);
-                    overlay.Set(reserved.Index, type, true, -1);
-                }
+                    Stage(CommandKind.Set, reserved, type);
             }
             foreach (var type in info.SparseTags)
-            {
-                stage.Record(CommandKind.Set, reserved, type, -1);
-                overlay.Set(reserved.Index, type, true, -1);
-            }
+                Stage(CommandKind.Set, reserved, type);
             foreach (var type in info.Singletons)
                 ClaimSingleton(reserved, type);
             foreach (var type in info.IndexedTypes)
@@ -102,7 +93,7 @@ public sealed partial class World
         var writer = new BundleWriter(this, archetype, row);
         bundle.Write(ref writer);
         foreach (var type in info.SparseTags)
-            AddSparseTag(entity, ref slot, type);
+            AddStored(entity, ref slot, type, ref Unsafe.NullRef<byte>());
         foreach (var type in info.Singletons)
             ClaimSingleton(entity, type);
         if (Tracking)
@@ -171,11 +162,11 @@ public sealed partial class World
     }
 
     /// <summary>Marks the entity pending destroy: still readable by handle, excluded from queries by default, finalised by the next playback
-    /// that finalises destroys. For an entity an observer created, or while it has changes waiting, the mark itself waits for the next
-    /// playback, or for the dispose of the entity's open <see cref="EntityBatch"/>, which checks the target policy then.</summary>
+    /// that finalises destroys. Inside a query walk the mark waits until the walk closes; for an entity an observer created, or while it has
+    /// changes waiting, it waits for the next playback, or for the dispose of the entity's open <see cref="EntityBatch"/>; the target policy
+    /// is checked then.</summary>
     /// <exception cref="TargetPolicyException">The entity, a descendant, or a source its destroy cascades to is the target of a
     /// <see cref="TargetPolicy.Throw"/> relation whose source is live and is not destroyed with it.</exception>
-    /// <exception cref="InvalidOperationException">A serial query body is running.</exception>
     [Effect(Effects.Structural | Effects.Mutates)]
     public void Destroy(
         Entity entity,
@@ -185,39 +176,39 @@ public sealed partial class World
     )
     {
         At(file, line);
-        DestroyEntity(entity, reason, guardTargets: true);
+        DestroyEntity(entity, reason);
+        VerifyInvariants();
     }
 
-    internal void DestroyEntity(Entity entity, LifecycleReason reason, bool guardTargets)
+    void DestroyEntity(Entity entity, LifecycleReason reason)
     {
         CheckWritable();
-        CheckStructural();
+        Structural();
         if (!allocator.IsCurrent(entity))
             return;
         ref var slot = ref allocator.Slots[entity.Index];
         // Guarded at playback, once the batch's reparents have landed.
-        if (DefersLifecycle(slot))
+        if (RecordsLifecycle(slot))
         {
-            stage.Record(CommandKind.Destroy, entity, reason: reason);
-            slot.Pending = true;
+            Stage(CommandKind.Destroy, entity, reason: reason);
             return;
         }
-        if (slot.State == LifecycleState.PendingDestroy && OwnsDestroy(slot))
+        if (OwnsDestroy(slot))
             return;
-        if (guardTargets)
-            CheckTargetPolicy(entity);
-        MarkPendingDestroy(entity, ref slot, reason);
-        if (attributed is { } log)
-            log.TagDestroy(entity.Index, log.Current(currentSystem));
-        RefreshAllIndexes(entity);
-        if (hierarchy.HasChildren(entity))
-            RefreshChildren(entity);
+        CheckTargetPolicy(entity);
+        MarkDestroyed(entity, ref slot, reason);
     }
 
-    static bool OwnsDestroy(in EntitySlot slot) =>
-        slot.Archetype?.IsPendingDestroy(slot.Row) == true;
+    static bool OwnsDestroy(in EntitySlot slot) => slot.State == LifecycleState.PendingDestroy;
 
-    void MarkPendingDestroy(Entity entity, ref EntitySlot slot, LifecycleReason reason)
+    // A recorded mark is judged against target policies once its batch has landed, and may yet be spared.
+    void MarkDestroyed(
+        Entity entity,
+        ref EntitySlot slot,
+        LifecycleReason reason,
+        bool recorded = false,
+        bool tag = true
+    )
     {
         slot.State = LifecycleState.PendingDestroy;
         slot.DestroyReason = reason;
@@ -228,13 +219,26 @@ public sealed partial class World
             slot.DestroyQueued = true;
             pendingDestroys.Add(entity);
         }
+        if (recorded)
+        {
+            destroyedRoots.Add(entity);
+            provisional.Add(entity);
+        }
+        if (tag && attributed is { } log)
+            log.TagDestroy(entity.Index, log.Current(currentSystem));
+        RefreshAllIndexes(entity);
+        if (hierarchy.HasChildren(entity))
+            RefreshChildren(entity);
     }
 
     /// <summary>Takes the entity out of pending destroy, and returns false if it was not pending destroy. An entity pending only through
-    /// an ancestor is spared by unparenting it. For an entity an observer created, or while it has changes waiting, the cancel waits for
-    /// the next playback and returns whether it spares a pending entity or overrides a recorded destroy.</summary>
-    /// <exception cref="InvalidOperationException">A serial query body is running.</exception>
-    [Effect(Effects.Structural | Effects.Mutates)]
+    /// an ancestor is spared by unparenting it. Inside a query walk the cancel waits until the walk closes, and for an entity an observer
+    /// created, or while it has changes waiting, until the next playback; it then returns whether reads see the entity dying, itself or
+    /// through an ancestor. A destroy observer cannot rescue what a finalising playback is releasing: the cancel does nothing and returns
+    /// false.</summary>
+    /// <exception cref="TargetPolicyException">The spared entity or a descendant spared with it is the source of a
+    /// <see cref="TargetPolicy.Throw"/> edge onto a dying target; nothing changed.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public bool CancelDestroy(
         Entity entity,
         [CallerFilePath] string file = "",
@@ -243,29 +247,34 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
-        CheckStructural();
+        Structural();
         if (!allocator.IsCurrent(entity))
             return false;
         ref var slot = ref allocator.Slots[entity.Index];
-        if (DefersLifecycle(slot))
-        {
-            var spares =
-                slot.State == LifecycleState.PendingDestroy
-                || (slot.State == LifecycleState.Alive && UnderPendingDestroy(entity))
-                || AncestorDestroyRecorded(entity);
-            stage.Record(CommandKind.CancelDestroy, entity);
-            slot.Pending = true;
-            return CancelsRecordedDestroy(stage.records[stage.count - 1]) || spares;
-        }
-        if (slot.State != LifecycleState.PendingDestroy)
+        if (planFrozen && !IsLive(entity))
+            return false;
+        if (RecordsLifecycle(slot))
+            return StageCancel(entity);
+        if (!ApplyCancel(entity, ref slot))
+            return false;
+        VerifyInvariants();
+        ThrowIndexConflicts();
+        return true;
+    }
+
+    // Both routes: an entity pending itself is spared, one pending only through an ancestor leaves it.
+    bool ApplyCancel(Entity entity, ref EntitySlot slot)
+    {
+        if (!OwnsDestroy(slot))
         {
             if (slot.State != LifecycleState.Alive || !UnderPendingDestroy(entity))
                 return false;
-            Reparent(entity, default, -1, default, guardTargets: false);
+            Reparent(entity, default, -1, default);
             return true;
         }
+        if (!UnderPendingDestroy(entity) && RevivalFault(entity) is { } fault)
+            throw fault;
         Spare(entity, ref slot);
-        ThrowIndexConflicts();
         return true;
     }
 
@@ -282,72 +291,29 @@ public sealed partial class World
         LogSpared(entity);
     }
 
-    bool AncestorDestroyRecorded(Entity entity)
+    internal bool AwayAsRecorded(Entity from, bool dying, bool detached)
     {
-        for (var up = hierarchy.ParentOf(entity); !up.IsDefault; up = hierarchy.ParentOf(up))
+        for (var node = from; !node.IsDefault; node = ParentAsRecorded(node))
         {
-            for (var i = stage.count - 1; i >= 0; i--)
-            {
-                ref readonly var record = ref stage.records[i];
-                if (record.Entity != up)
-                    continue;
-                if (record.Kind == CommandKind.Destroy)
-                    return true;
-                if (record.Kind == CommandKind.CancelDestroy)
-                    break;
-            }
+            ref readonly var slot = ref allocator.Slots[node.Index];
+            if (
+                (dying && overlay.Marked(node.Index, PendingOverlay.Destroying, OwnsDestroy(slot)))
+                || (
+                    detached
+                    && overlay.Marked(node.Index, PendingOverlay.Detaching, slot.DetachedSelf)
+                )
+            )
+                return true;
         }
         return false;
     }
 
-    bool CancelsRecordedDestroy(in CommandRecord cancel)
-    {
-        CommandRecord latest = default;
-        var any = false;
-        if (!LatestBefore(stage, cancel, ref latest, ref any))
-            return false;
-        foreach (var buffer in submitted)
-        {
-            if (!LatestBefore(buffer, cancel, ref latest, ref any))
-                return false;
-        }
-        return any && latest.Kind == CommandKind.Destroy;
-    }
-
-    static bool LatestBefore(
-        CommandBuffer buffer,
-        in CommandRecord cancel,
-        ref CommandRecord latest,
-        ref bool any
-    )
-    {
-        for (var i = 0; i < buffer.count; i++)
-        {
-            ref readonly var record = ref buffer.records[i];
-            if (
-                record.Entity != cancel.Entity
-                || record.Kind is not (CommandKind.Destroy or CommandKind.CancelDestroy)
-            )
-                continue;
-            var order = PlaybackOrder(record, cancel);
-            if (order > 0 && record.Kind == CommandKind.Destroy)
-                return false;
-            if (order < 0 && (!any || PlaybackOrder(record, latest) > 0))
-            {
-                latest = record;
-                any = true;
-            }
-        }
-        return true;
-    }
-
     /// <summary>Moves the entity and its descendants into the detached partition, out of queries and systems but still reachable by
     /// handle; each moved entity is logged <see cref="LogKind.Detached"/> with <paramref name="reason"/>. Relation edges and parent links
-    /// stay. An entity stays detached while it or any ancestor is; a descendant parented later joins the partition too. Inside an observer
-    /// the move defers to the next playback.</summary>
-    /// <exception cref="InvalidOperationException">The entity does not exist, the move collides in a unique index, or a serial query body is
-    /// running.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// stay. An entity stays detached while it or any ancestor is; a descendant parented later joins the partition too. Inside a query walk
+    /// the move waits until the walk closes, and inside an observer until the next playback.</summary>
+    /// <exception cref="InvalidOperationException">The entity does not exist, or the move collides in a unique index.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Detach(
         Entity entity,
         LifecycleReason reason = default,
@@ -360,11 +326,10 @@ public sealed partial class World
     }
 
     /// <summary>Undoes this entity's own <see cref="Detach"/>: it and its descendants return where queries and systems see them, except
-    /// those that detached themselves or still have a detached ancestor; no-op when the entity did not detach itself. Inside an observer
-    /// the move defers to the next playback.</summary>
-    /// <exception cref="InvalidOperationException">The entity does not exist, the move collides in a unique index, or a serial query body is
-    /// running.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// those that detached themselves or still have a detached ancestor; no-op when the entity did not detach itself. Inside a query walk
+    /// the move waits until the walk closes, and inside an observer until the next playback.</summary>
+    /// <exception cref="InvalidOperationException">The entity does not exist, or the move collides in a unique index.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Reattach(
         Entity entity,
         LifecycleReason reason = default,
@@ -379,23 +344,18 @@ public sealed partial class World
     void SetPartition(Entity entity, bool detached, LifecycleReason reason)
     {
         CheckWritable();
-        CheckStructural();
+        Structural();
         ref var slot = ref Slot(entity);
-        partitionsUsed = true;
-        if (Defers(slot))
+        if (RecordsStructure(slot))
         {
-            stage.Record(
-                detached ? CommandKind.Detach : CommandKind.Reattach,
-                entity,
-                reason: reason
-            );
-            slot.Pending = true;
+            Stage(detached ? CommandKind.Detach : CommandKind.Reattach, entity, reason: reason);
             return;
         }
         if (slot.DetachedSelf == detached)
             return;
         slot.DetachedSelf = detached;
         RefreshPartitions(entity, reason);
+        VerifyInvariants();
         ThrowIndexConflicts();
     }
 
@@ -440,175 +400,154 @@ public sealed partial class World
         }
     }
 
-    // Each pending root takes its whole subtree with it, children first; descendants not marked themselves take the root's reason.
     int FinalizeDestroys()
     {
         if (pendingDestroys.Count == 0)
             return 0;
         var batch = pendingDestroys.Count;
-        if (guardsTargets && AnyThrowEdge())
-            CheckFinalisable(batch);
+        SpareViolatingRoots(pendingDestroys, batch);
+        PlanRelease(batch);
+        var errors = NotifyDestroying(CollectionsMarshal.AsSpan(finalising), null, freeze: true);
+        foreach (var entity in finalising)
+        {
+            attributed?.BeginReplay(attributed.DestroyTag(entity.Index));
+            Release(entity, ReleaseReason(entity), LogKind.Destroyed);
+        }
+        attributed?.EndReplay();
+        var finalised = finalising.Count;
+        VerifyReleased(finalising);
+        for (var i = 0; i < batch; i++)
+        {
+            ref var slot = ref allocator.Current(pendingDestroys[i]);
+            if (!Unsafe.IsNullRef(ref slot))
+                slot.DestroyQueued = false;
+        }
+        pendingDestroys.RemoveRange(0, batch);
+        foreach (var source in cascadeRoots)
+        {
+            ref var slot = ref allocator.Current(source);
+            if (Unsafe.IsNullRef(ref slot) || OwnsDestroy(slot))
+                continue;
+            MarkDestroyed(source, ref slot, LifecycleReason.Cascade, tag: false);
+        }
         finalising.Clear();
-        inheriting.Clear();
-        if (gathered.Length < allocator.Capacity)
-            Array.Resize(ref gathered, Math.Max(allocator.Capacity, gathered.Length * 2));
+        cascadeRoots.Clear();
+        if (errors is not null)
+            observerFailures.AddRange(errors);
+        return finalised;
+    }
+
+    // The sources a cascade destroys next are read now, before a release clears the edges that name them.
+    void PlanRelease(int batch)
+    {
+        finalising.Clear();
+        cascadeRoots.Clear();
+        BeginDoomed();
         for (var i = 0; i < batch; i++)
         {
             var root = pendingDestroys[i];
             ref var slot = ref allocator.Current(root);
-            if (Unsafe.IsNullRef(ref slot))
+            if (Unsafe.IsNullRef(ref slot) || !OwnsDestroy(slot) || doomedWaves[root.Index] != 0)
                 continue;
-            if (slot.State != LifecycleState.PendingDestroy)
-                slot.DestroyQueued = false;
-            else if (gathered[root.Index] == 0)
-                GatherSubtree(root, finalising);
-        }
-        try
-        {
-            if (observers.destroys.Length > 0)
-                NotifyFinalising();
-        }
-        finally
-        {
-            foreach (var entity in finalising)
-                gathered[entity.Index] = 0;
-        }
-
-        var finalised = 0;
-        foreach (var entity in finalising)
-        {
-            ref var slot = ref allocator.Current(entity);
-            if (Unsafe.IsNullRef(ref slot))
-                continue;
-            if (slot.State != LifecycleState.PendingDestroy)
+            var start = doomed.Count;
+            DoomSubtree(root, 1);
+            // Children first, so a subtree is released bottom-up and each parent is still whole while its children go.
+            for (var d = doomed.Count - 1; d >= start; d--)
             {
-                slot.DestroyQueued = false;
-                continue;
+                var member = doomed[d];
+                finalising.Add(member);
+                if (!OwnsDestroy(allocator.Slots[member.Index]))
+                    attributed?.InheritDestroy(member.Index, root.Index);
             }
-            attributed?.BeginReplay(attributed.DestroyTag(entity.Index));
-            Release(entity, slot.DestroyReason);
-            finalised++;
         }
-        attributed?.EndReplay();
-        pendingDestroys.RemoveRange(0, batch);
-        finalising.Clear();
-        inheriting.Clear();
-        return finalised;
+        foreach (var member in finalising)
+        {
+            foreach (var store in relations)
+            {
+                if (store is not { Policy: TargetPolicy.DestroySource })
+                    continue;
+                foreach (var source in store.SourcesOf(member))
+                {
+                    if (doomedWaves[source.Index] != 0)
+                        continue;
+                    Doom(source, 2);
+                    cascadeRoots.Add(source);
+                    attributed?.InheritDestroy(source.Index, member.Index);
+                }
+            }
+        }
+        EndDoomed();
     }
 
-    void NotifyFinalising()
+    LifecycleReason ReleaseReason(Entity entity)
     {
+        ref readonly var slot = ref allocator.Slots[entity.Index];
+        return slot.State == LifecycleState.PendingDestroy
+            ? slot.DestroyReason
+            : LifecycleReason.Cascade;
+    }
+
+    internal List<Exception>? NotifyDestroying(
+        ReadOnlySpan<Entity> leaving,
+        LifecycleReason? reason,
+        bool freeze,
+        bool lastFirst = false
+    )
+    {
+        if (!observers.AnyDestroy)
+            return null;
         using var delivery = BeginDelivery();
+        planFrozen = freeze;
         try
         {
             List<Exception>? errors = null;
-            foreach (var entity in finalising)
+            for (var n = 0; n < leaving.Length; n++)
             {
-                var context = new ObserverContext(
-                    this,
-                    allocator.Slots[entity.Index].DestroyReason
+                var entity = leaving[lastFirst ? leaving.Length - 1 - n : n];
+                observers.RunDestroy(
+                    new ObserverContext(this, reason ?? ReleaseReason(entity)),
+                    entity,
+                    ref errors
                 );
-                foreach (var (_, observer) in observers.destroys)
-                {
-                    try
-                    {
-                        observer.OnDestroy(context, entity);
-                    }
-                    catch (Exception error)
-                    {
-                        (errors ??= []).Add(error);
-                    }
-                }
             }
-            ObserverRegistry.Rethrow(errors);
-            SpareRescuedDescendants();
-            if (guardsTargets && AnyRescued() && AnyThrowEdge())
-                CheckFinalising();
+            return errors;
         }
-        catch
+        finally
         {
-            RestoreInherited(spare: false);
-            throw;
+            planFrozen = false;
         }
     }
 
-    bool AnyRescued()
+    // A spare revives the sources an earlier root's check counted as dying, so the roots are checked again until none is spared.
+    void SpareViolatingRoots(List<Entity> roots, int count)
     {
-        foreach (var entity in finalising)
-        {
-            ref var slot = ref allocator.Current(entity);
-            if (Unsafe.IsNullRef(ref slot) || slot.State != LifecycleState.PendingDestroy)
-                return true;
-        }
-        return false;
-    }
-
-    // A descendant stays doomed only through a chain of this batch's pending entities up to one marked itself, as the hierarchy is now.
-    void SpareRescuedDescendants()
-    {
-        if (inheriting.Count == 0)
+        if (!guardsTargets || !AnyThrowEdge())
             return;
-        var count = 0;
-        foreach (var entity in finalising)
+        bool spared;
+        do
         {
-            ref var slot = ref allocator.Current(entity);
-            if (
-                Unsafe.IsNullRef(ref slot)
-                || slot.State != LifecycleState.PendingDestroy
-                || !OwnsDestroy(slot)
-            )
-                continue;
-            gathered[entity.Index] = Reached;
-            Push(ref count, entity);
-        }
-        while (count > 0)
-        {
-            foreach (var child in hierarchy.ChildrenOf(walk[--count]))
+            spared = false;
+            for (var i = 0; i < count; i++)
             {
+                var root = roots[i];
+                ref var slot = ref allocator.Current(root);
                 if (
-                    child.Index >= gathered.Length
-                    || gathered[child.Index] != Gathered
-                    || allocator.Slots[child.Index].State != LifecycleState.PendingDestroy
+                    Unsafe.IsNullRef(ref slot)
+                    || !OwnsDestroy(slot)
+                    || SurvivorOf(root) is not { } error
                 )
                     continue;
-                gathered[child.Index] = Reached;
-                Push(ref count, child);
+                commandFailures.Add(error);
+                Spare(root, ref slot);
+                spared = true;
             }
-        }
-        RestoreInherited(spare: true);
+        } while (spared);
     }
 
-    void RestoreInherited(bool spare)
-    {
-        restored.Clear();
-        foreach (var (entity, state) in inheriting)
-        {
-            ref var slot = ref allocator.Current(entity);
-            if (
-                Unsafe.IsNullRef(ref slot)
-                || slot.State != LifecycleState.PendingDestroy
-                || OwnsDestroy(slot)
-                || (spare && gathered[entity.Index] == Reached)
-            )
-                continue;
-            slot.State = state;
-            slot.DestroyReason = default;
-            attributed?.TagDestroy(entity.Index, default);
-            if (spare)
-                changes.Append(LogKind.DestroyCancelled, entity, -1, default);
-            restored.Add(entity);
-        }
-        foreach (var entity in restored)
-            RefreshAllIndexes(entity);
-        restored.Clear();
-        if (!spare)
-            inheriting.Clear();
-    }
-
-    void Release(Entity entity, LifecycleReason reason)
+    void Release(Entity entity, LifecycleReason reason, LogKind kind)
     {
         foreach (var store in relations)
-            store?.ReleaseEntity(this, entity);
+            store?.ReleaseEntity(this, entity, reason);
         foreach (var store in rowStores)
             store?.ReleaseEntity(this, entity, reason);
         if (!hierarchy.IsEmpty)
@@ -618,12 +557,7 @@ public sealed partial class World
         var held = slot.Pending ? null : slot.Archetype;
         if (slot.Archetype is { } archetype)
         {
-            if (
-                coreHooks.Count > 0
-                || observers.AnyRemove
-                || archetype.HasSingleton
-                || archetype.OwnsBuffers
-            )
+            if (observers.AnyRemove || archetype.HasSingleton || archetype.OwnsBuffers)
                 DepartRow(entity, archetype, slot.Row, reason);
             Vacate(archetype, slot.Row);
         }
@@ -631,7 +565,7 @@ public sealed partial class World
             ReleaseSparse(entity, ref slot, reason);
         ReleaseIndexes(entity, held);
         if (placed)
-            changes.Append(extracting ? LogKind.Extracted : LogKind.Destroyed, entity, -1, reason);
+            changes.Append(kind, entity, -1, reason);
         allocator.Free(entity.Index);
     }
 
@@ -683,84 +617,5 @@ public sealed partial class World
                 slot.SparseCount--;
             }
         }
-    }
-
-    internal IterationScope BeginIteration()
-    {
-        iterationDepth++;
-        walkDepth++;
-        return new IterationScope(this, walk: true);
-    }
-
-    internal IterationScope BeginDelivery()
-    {
-        iterationDepth++;
-        return new IterationScope(this, walk: false);
-    }
-
-    internal ref struct IterationScope(World world, bool walk)
-    {
-        World? world = world;
-
-        public void Dispose()
-        {
-            if (world is null)
-                return;
-            if (world.iterationDepth > 0)
-                world.iterationDepth--;
-            if (walk && world.walkDepth > 0)
-                world.walkDepth--;
-            world = null;
-        }
-    }
-
-    internal void ReplayAdds(int type, int recipient)
-    {
-        switch (layout.Class[type])
-        {
-            case StorageClass.Sparse:
-                if (sparse[layout.SparseSlot[type]] is { } storage)
-                {
-                    for (var i = 0; i < storage.Count; i++)
-                        observers.QueueReplay(
-                            storage.Owners[i],
-                            type,
-                            ref storage.RowRef(i),
-                            recipient
-                        );
-                }
-                return;
-            case StorageClass.SparseTag:
-                if (sparseTags[layout.SparseTagSlot[type]] is { } tags)
-                {
-                    foreach (var holder in HoldersOf(tags))
-                        observers.QueueReplay(holder, type, ref ZeroBytes.Value, recipient);
-                }
-                return;
-        }
-        foreach (var archetype in archetypes)
-        {
-            if (!archetype.Signature.Has(type))
-                continue;
-            var column = archetype.ColumnSlot(type);
-            var enable = archetype.EnableSlot(type);
-            for (var row = 0; row < archetype.Count; row++)
-            {
-                if (enable >= 0 && !archetype.IsEnabled(enable, row))
-                    continue;
-                observers.QueueReplay(
-                    archetype.Entities[row],
-                    type,
-                    ref column >= 0 ? ref archetype.RowRef(column, row) : ref ZeroBytes.Value,
-                    recipient
-                );
-            }
-        }
-    }
-
-    IEnumerable<Entity> HoldersOf(SparseTagStorage tags)
-    {
-        foreach (var index in tags.Indices())
-            yield return new Entity(index, allocator.Slots[index].Generation);
     }
 }

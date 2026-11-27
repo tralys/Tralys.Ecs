@@ -19,4 +19,54 @@ public sealed partial class ChangedFilterTests
 
         await Assert.That(seen).IsEquivalentTo([entity]);
     }
+
+    struct CountChanged : IChunkKernel
+    {
+        public int Rows;
+
+        public void Execute(ref ChunkView chunk)
+        {
+            foreach (var _ in chunk.Rows)
+                Rows++;
+        }
+    }
+
+    struct WriteAfterChangedRun(CachedQuery changed) : IChunkKernel
+    {
+        public void Execute(ref ChunkView chunk)
+        {
+            var health = chunk.Write<Health>();
+            foreach (var row in chunk.Rows)
+            {
+                var nested = new CountChanged();
+                changed.Run(ref nested);
+                using var edit = health.Edit(row);
+                edit.Value.Value++;
+            }
+        }
+    }
+
+    [Test]
+    public async Task A_write_released_after_a_nested_changed_run_reaches_that_query_s_next_run()
+    {
+        using var world = TestWorlds.Create();
+        var entity = world.Create();
+        world.Set(entity, new Health { Value = 1 });
+        var changed = world.Query(QueryDesc.Builder().Read<Health>().Changed<Health>().Build());
+        var writer = world.Query(QueryDesc.Builder().Write<Health>().Build());
+
+        int seen;
+        using (world.BeginSystemRun(SystemId.Next()))
+        {
+            var first = new CountChanged();
+            changed.Run(ref first);
+            var kernel = new WriteAfterChangedRun(changed);
+            writer.Run(ref kernel);
+            var next = new CountChanged();
+            changed.Run(ref next);
+            seen = next.Rows;
+        }
+
+        await Assert.That(seen).IsEqualTo(1);
+    }
 }

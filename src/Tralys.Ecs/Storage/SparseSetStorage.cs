@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
 
-internal abstract class SparseStorage
+internal abstract class SparseStorage : IMoveCount
 {
     protected const int PageBits = 10;
     protected const int PageSize = 1 << PageBits;
@@ -13,6 +13,8 @@ internal abstract class SparseStorage
     public ulong[] Changed = new ulong[16];
     public ulong[] Added = new ulong[16];
     public int Count;
+
+    [Effect(Effects.MovesEntities)]
     public int Moves;
     public readonly int Type;
     public bool Stamped { get; private set; } = true;
@@ -20,6 +22,8 @@ internal abstract class SparseStorage
     internal World? propagator;
 
     protected SparseStorage(int type) => Type = type;
+
+    int IMoveCount.MoveCount => Moves;
 
     public abstract SparseStorage Clone();
 
@@ -29,8 +33,14 @@ internal abstract class SparseStorage
         Changed = Added = [];
     }
 
-    // The owner, value and, when stamped, stamp arrays grow together, so they keep one length.
     public void Load(SparseStorage source)
+    {
+        CopyFrom(source);
+        Moves++;
+    }
+
+    // The owner, value and, when stamped, stamp arrays grow together, so they keep one length.
+    public void CopyFrom(SparseStorage source)
     {
         Copies.LoadPages(ref pages, source.pages, PageSize);
         if (Owners.Length < source.Count)
@@ -52,7 +62,6 @@ internal abstract class SparseStorage
         }
         LoadValues(source);
         Count = source.Count;
-        Moves++;
     }
 
     protected abstract void LoadValues(SparseStorage source);
@@ -187,7 +196,7 @@ internal sealed class SparseStorage<T> : SparseStorage
         var copy = new SparseStorage<T>(Type) { propagator = propagator };
         if (!Stamped)
             copy.DropStamps();
-        copy.Load(this);
+        copy.CopyFrom(this);
         return copy;
     }
 

@@ -47,6 +47,7 @@ public readonly record struct CaptureOptions
 public interface ICaptureBoundary
 {
     /// <summary>True takes <paramref name="candidate"/> into the subset; false leaves it outside, and references to it become external.</summary>
+    [Effect(Effects.None)]
     bool Include(World world, Entity candidate);
 }
 
@@ -54,6 +55,7 @@ public interface ICaptureBoundary
 public interface IExternalRefTranslator
 {
     /// <summary>The external reference for <paramref name="outside"/>; called once per distinct outside entity in a capture.</summary>
+    [Effect(Effects.None)]
     ExternalRef Translate(World world, Entity outside);
 }
 
@@ -61,6 +63,7 @@ public interface IExternalRefTranslator
 public interface IExternalRefResolver
 {
     /// <summary>The entity <paramref name="reference"/> names; false, or an entity that does not exist, leaves it unresolved.</summary>
+    [Effect(Effects.None)]
     bool TryResolve(in ExternalRef reference, out Entity entity);
 }
 
@@ -68,6 +71,7 @@ public interface IExternalRefResolver
 public interface IFieldRebaser
 {
     /// <summary>Rewrites one restored value of <paramref name="field"/> in place; <paramref name="value"/> is that field's bytes.</summary>
+    [Effect(Effects.None)]
     void Rebase(FieldDescriptor field, Span<byte> value);
 }
 
@@ -158,10 +162,15 @@ public readonly ref struct RestoreResult
 /// <summary>The outcome of <see cref="World.Extract"/>.</summary>
 public readonly struct ExtractResult
 {
-    internal ExtractResult(CaptureImage image, IndexConflictException? conflict)
+    internal ExtractResult(
+        CaptureImage image,
+        IndexConflictException? conflict,
+        AggregateException? observerFailures
+    )
     {
         Image = image;
         Conflict = conflict;
+        ObserverFailures = observerFailures;
     }
 
     /// <summary>The captured subset, which has left the world.</summary>
@@ -170,6 +179,10 @@ public readonly struct ExtractResult
     /// <summary>The conflicts a <see cref="ConflictPolicy.Throw"/> index saw while the subset left, such as from a destroy observer's
     /// write, or null. Extract reports them here instead of throwing, so the image is not lost.</summary>
     public IndexConflictException? Conflict { get; }
+
+    /// <summary>Every exception a destroy observer threw while the subset left, or null. The subset left regardless, and Extract reports
+    /// them here instead of throwing, so the image is not lost.</summary>
+    public AggregateException? ObserverFailures { get; }
 }
 
 /// <summary>Resolves the external references a capture writes without a translator, the raw source handles, back to the same entities. For

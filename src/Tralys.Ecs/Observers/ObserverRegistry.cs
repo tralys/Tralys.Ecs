@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.ExceptionServices;
 
 namespace Tralys.Ecs;
 
@@ -31,6 +30,7 @@ internal struct ObserverEvent
     public int Old;
     public int New;
     public int Recipient;
+    public int Watermark;
     public LifecycleReason Reason;
 }
 
@@ -42,7 +42,12 @@ internal abstract class TypeObservers
     public abstract bool WantsRelation { get; }
     public abstract PayloadStore Values { get; }
 
-    public abstract void Deliver(World world, in ObserverEvent e, ref List<Exception>? errors);
+    public abstract void Deliver(
+        World world,
+        in ObserverEvent e,
+        HashSet<int> removed,
+        ref List<Exception>? errors
+    );
 
     public abstract bool Remove(int id);
 }
@@ -79,14 +84,21 @@ internal sealed class TypeObservers<T> : TypeObservers
     public override bool WantsRelation => Relations.Length > 0;
     public override PayloadStore Values => Store;
 
-    public override void Deliver(World world, in ObserverEvent e, ref List<Exception>? errors)
+    public override void Deliver(
+        World world,
+        in ObserverEvent e,
+        HashSet<int> removed,
+        ref List<Exception>? errors
+    )
     {
         var context = new ObserverContext(world, e.Reason);
         switch (e.Kind)
         {
             case EventKind.Add:
-                foreach (var (_, observer) in Adds)
+                foreach (var (id, observer) in Adds)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnAdd(context, e.Entity, Store[e.New]);
@@ -100,7 +112,7 @@ internal sealed class TypeObservers<T> : TypeObservers
             case EventKind.Replay:
                 foreach (var (id, observer) in Adds)
                 {
-                    if (id != e.Recipient)
+                    if (id != e.Recipient || removed.Contains(id))
                         continue;
                     try
                     {
@@ -113,8 +125,10 @@ internal sealed class TypeObservers<T> : TypeObservers
                 }
                 break;
             case EventKind.Remove:
-                foreach (var (_, observer) in Removes)
+                foreach (var (id, observer) in Removes)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnRemove(context, e.Entity, Store[e.Old]);
@@ -126,8 +140,10 @@ internal sealed class TypeObservers<T> : TypeObservers
                 }
                 break;
             case EventKind.Replace:
-                foreach (var (_, observer) in Replaces)
+                foreach (var (id, observer) in Replaces)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnReplace(context, e.Entity, Store[e.Old], Store[e.New]);
@@ -139,8 +155,10 @@ internal sealed class TypeObservers<T> : TypeObservers
                 }
                 break;
             case EventKind.Related:
-                foreach (var (_, observer) in Relations)
+                foreach (var (id, observer) in Relations)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnRelated(context, e.Entity, e.Other, Store[e.New]);
@@ -152,8 +170,10 @@ internal sealed class TypeObservers<T> : TypeObservers
                 }
                 break;
             case EventKind.Unrelated:
-                foreach (var (_, observer) in Relations)
+                foreach (var (id, observer) in Relations)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnUnrelated(context, e.Entity, e.Other, Store[e.New]);
@@ -165,8 +185,10 @@ internal sealed class TypeObservers<T> : TypeObservers
                 }
                 break;
             case EventKind.RelationChanged:
-                foreach (var (_, observer) in Relations)
+                foreach (var (id, observer) in Relations)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnRelationChanged(
@@ -208,6 +230,28 @@ public sealed class ObserverRegistry
     internal (int Id, IHierarchyObserver Observer)[] hierarchies = [];
     internal bool AnyAdd;
     internal bool AnyRemove;
+    internal readonly HashSet<int> removed = [];
+
+    internal bool AnyDestroy => destroys.Length > 0;
+
+    // An observer that throws stops none of the others.
+    internal void RunDestroy(ObserverContext context, Entity entity, ref List<Exception>? errors)
+    {
+        foreach (var (id, observer) in destroys)
+        {
+            if (removed.Contains(id))
+                continue;
+            try
+            {
+                observer.OnDestroy(context, entity);
+            }
+            catch (Exception error)
+            {
+                (errors ??= []).Add(error);
+            }
+        }
+    }
+
     ObserverEvent[] queue = new ObserverEvent[64];
     ObserverEvent[] delivering = new ObserverEvent[64];
     int queued;
@@ -278,7 +322,9 @@ public sealed class ObserverRegistry
         return new ObserverId(id);
     }
 
-    /// <summary>Entities about to be released by finalisation or by <see cref="World.Extract"/>, called while every component is still readable.</summary>
+    /// <summary>Entities about to be released by finalisation or by <see cref="World.Extract"/>, called while every component is still readable.
+    /// During finalisation the release is already decided: every write the observer makes, destroys, cancels and reparents included, applies
+    /// after it, later in the same playback.</summary>
     public ObserverId OnDestroy(IDestroyObserver observer)
     {
         var id = nextId++;
@@ -312,23 +358,24 @@ public sealed class ObserverRegistry
         return new ObserverId(id);
     }
 
-    /// <summary>Unregisters the observer registered under <paramref name="id"/>.</summary>
-    /// <exception cref="ArgumentException">No observer is registered under <paramref name="id"/>.</exception>
+    /// <summary>Unregisters the observer registered under <paramref name="id"/>, which hears nothing more, not even the rest of an event
+    /// being delivered; one already removed does nothing.</summary>
+    /// <exception cref="ArgumentException">This registry never issued <paramref name="id"/>.</exception>
     public void Remove(ObserverId id)
     {
-        var found = false;
+        if ((uint)id.Value >= (uint)nextId)
+            throw new ArgumentException($"Observer {id.Value} was never registered.", nameof(id));
+        removed.Add(id.Value);
         AnyAdd = AnyRemove = false;
         foreach (var observers in live)
         {
-            found |= observers.Remove(id.Value);
+            observers.Remove(id.Value);
             AnyAdd |= observers.WantsAdd;
             AnyRemove |= observers.WantsRemove;
         }
-        found |= Drop(ref destroys, id.Value);
-        found |= Drop(ref lifecycles, id.Value);
-        found |= Drop(ref hierarchies, id.Value);
-        if (!found)
-            throw new ArgumentException($"Observer {id.Value} is not registered.", nameof(id));
+        Drop(ref destroys, id.Value);
+        Drop(ref lifecycles, id.Value);
+        Drop(ref hierarchies, id.Value);
     }
 
     static bool Drop<TObserver>(ref (int Id, TObserver Observer)[] observers, int id)
@@ -541,11 +588,12 @@ public sealed class ObserverRegistry
     {
         if (queued == queue.Length)
             Array.Resize(ref queue, queued * 2);
-        queue[queued++] = e;
+        queue[queued] = e;
+        queue[queued++].Watermark = nextId;
     }
 
     // Events queued by observers during delivery wait for the next round.
-    internal int Deliver()
+    internal int Deliver(List<Exception> failures)
     {
         var count = queued;
         if (count == 0)
@@ -559,12 +607,14 @@ public sealed class ObserverRegistry
         {
             ref readonly var e = ref delivering[i];
             if (e.Type >= 0)
-                byType[e.Type]?.Deliver(world, e, ref errors);
+                byType[e.Type]?.Deliver(world, e, removed, ref errors);
             else if (e.Kind == EventKind.Hierarchy)
             {
                 var context = new ObserverContext(world, e.Reason);
-                foreach (var (_, observer) in hierarchies)
+                foreach (var (id, observer) in hierarchies)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnHierarchy(context, e.Entity, e.Other, e.Hierarchy);
@@ -578,8 +628,10 @@ public sealed class ObserverRegistry
             else
             {
                 var context = new ObserverContext(world, e.Reason);
-                foreach (var (_, observer) in lifecycles)
+                foreach (var (id, observer) in lifecycles)
                 {
+                    if (id >= e.Watermark || removed.Contains(id))
+                        continue;
                     try
                     {
                         observer.OnLifecycle(context, e.Entity, e.Lifecycle);
@@ -591,21 +643,16 @@ public sealed class ObserverRegistry
                 }
             }
         }
-        Rethrow(errors);
-        return count;
-    }
-
-    internal static void Rethrow(List<Exception>? errors)
-    {
-        if (errors is { Count: 1 })
-            ExceptionDispatchInfo.Throw(errors[0]);
+        removed.Clear();
         if (errors is not null)
-            throw new AggregateException("More than one observer threw.", errors);
+            failures.AddRange(errors);
+        return count;
     }
 
     internal void Discard()
     {
         queued = 0;
+        removed.Clear();
         ResetStores();
     }
 

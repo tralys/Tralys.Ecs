@@ -7,9 +7,23 @@ namespace Tralys.Ecs;
 public interface IWorldAttachment
 {
     /// <summary>Runs at the end of <see cref="World.Clear"/>, once the world is empty.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnWorldCleared(World world);
 
     /// <summary>Runs after <see cref="World.Reset"/> or <see cref="World.Restore"/>, once the world's data is in place.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnWorldRestored(World world, in RestoreInfo info);
 }
 
@@ -57,6 +71,7 @@ public sealed partial class World
     public void SetAttachment<T>(T attachment)
         where T : class, IWorldAttachment
     {
+        CheckWritable();
         var index = AttachmentSlot<T>.Index;
         if (index >= attachments.Length)
             Array.Resize(ref attachments, Math.Max(index + 1, attachments.Length * 2));

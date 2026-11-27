@@ -18,6 +18,13 @@ public sealed partial class World
     internal int indexRefreshes;
     readonly List<IndexStore> contested = [];
     IndexEdit[] indexEdits = [];
+    long indexClock;
+    long indexAt;
+
+    internal long IndexTick() => ++indexClock;
+
+    // Playback pins the position of the record it applies, so a unique key goes to the write the immediate calls would have made last.
+    internal long NextIndexPosition() => indexAt != 0 ? indexAt : IndexTick();
 
     internal UniqueIndex<TKey> UniqueIndexOf<TComponent, TKey>(int ordinal)
         where TComponent : struct, IComponent

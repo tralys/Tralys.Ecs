@@ -18,6 +18,10 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
     /// <inheritdoc cref="Tralys.Ecs.World.StateOf(Entity)"/>
     public LifecycleState State => World?.StateOf(Entity) ?? LifecycleState.Dead;
 
+    /// <summary>The entity's reads alone, for a helper that writes nothing and is also called where only a <see cref="WorldReader"/> is
+    /// at hand.</summary>
+    public EntityReader Reader => new(World is null ? default : World.Reader, Entity);
+
     World Bound => World ?? throw World.NotAlive(Entity);
 
     bool Current => World is not null && World.Exists(Entity);
@@ -33,7 +37,7 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
         where T : struct, IComponent => Current && World.HasStored<T>(Entity);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Get{T}(Entity)"/>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public ref readonly T Get<T>()
         where T : struct, IComponent => ref Bound.Get<T>(Entity);
 
@@ -60,7 +64,7 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
     }
 
     /// <inheritdoc cref="Tralys.Ecs.World.Find{T}(Entity)"/>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public Optional<T> Find<T>()
         where T : struct, IComponent => Current ? World.Find<T>(Entity) : default;
 
@@ -78,11 +82,12 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
     public ComponentEdit<T> FindEdit<T>()
         where T : struct, IMutableComponent => Current ? World.FindEdit<T>(Entity) : default;
 
-    /// <summary>Adds or overwrites, enabling a disabled one. An overwrite applies at once and stamps only if the value differs; an add or
-    /// enable throws inside a serial query body, and inside an observer waits for the next playback while reads see it at once.</summary>
+    /// <summary>Adds or overwrites, enabling a disabled one; an overwrite applies at once and stamps only if the value differs. An add or
+    /// enable waits inside a query walk, until the walk closes, and inside an observer, until the next playback; reads see it at
+    /// once.</summary>
     /// <exception cref="InvalidOperationException">The entity does not exist, or the add breaks a requirement, a singleton claim or a
     /// unique index.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Set<T>(
         in T value,
         [CallerFilePath] string file = "",
@@ -100,14 +105,13 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
         where T : struct, IComponent => Bound.Replace(Entity, value, file, line);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Add{T}"/>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Add<T>([CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
         where T : struct, ITag => Bound.Add<T>(Entity, file: file, line: line);
 
     /// <summary>An edit of the component, first set to <paramref name="initial"/>, and so enabled, when missing or disabled; an add or
-    /// enable throws inside a serial query body, and inside an observer waits for the next playback while the edit writes the pending
-    /// value.</summary>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// enable inside a query walk or an observer waits, as <see cref="Set{T}"/>'s does, while the edit writes the pending value.</summary>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public ComponentEdit<T> EditOrAdd<T>(
         in T initial = default,
         [CallerFilePath] string file = "",
@@ -117,7 +121,7 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
         Bound.EditOrAdd(Entity, initial, file: file, line: line);
 
     /// <summary><see cref="Set{T}"/> when <paramref name="value"/> has a value, otherwise <see cref="Remove{T}"/>.</summary>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void SetOrRemove<T>(
         in T? value,
         [CallerFilePath] string file = "",
@@ -126,7 +130,7 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
         where T : struct, IComponent => Bound.SetOrRemove(Entity, value, file: file, line: line);
 
     /// <inheritdoc cref="Tralys.Ecs.World.Remove{T}"/>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public bool Remove<T>([CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
         where T : struct, IComponent => Current && World.Remove<T>(Entity, file: file, line: line);
 
@@ -157,7 +161,7 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
     public EntityList Children() => Current ? World.Children(Entity) : default;
 
     /// <inheritdoc cref="Tralys.Ecs.World.SetParent"/>
-    [Effect(Effects.Structural | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void SetParent(
         Entity parent,
         int index = -1,
@@ -166,7 +170,7 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
     ) => Bound.SetParent(Entity, parent, index, file: file, line: line);
 
     /// <inheritdoc cref="Tralys.Ecs.World.ClearParent"/>
-    [Effect(Effects.Structural | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void ClearParent([CallerFilePath] string file = "", [CallerLineNumber] int line = 0) =>
         Bound.ClearParent(Entity, file: file, line: line);
 
@@ -177,16 +181,20 @@ public readonly struct WorldEntity(World world, Entity entity) : IEquatable<Worl
         where TView : struct, IEntityView<TView> => TView.TryFrom(this, out view);
 
     /// <summary>The same world instance and the same handle.</summary>
+    [Effect(Effects.None)]
     public bool Equals(WorldEntity other) =>
         ReferenceEquals(World, other.World) && Entity == other.Entity;
 
     /// <summary>Compares the handle alone, as <c>==</c> does through the implicit conversion to <see cref="Tralys.Ecs.Entity"/>.</summary>
+    [Effect(Effects.None)]
     public bool Equals(Entity other) => Entity == other;
 
     /// <inheritdoc/>
+    [Effect(Effects.None)]
     public override bool Equals(object? obj) => obj is WorldEntity other && Equals(other);
 
     /// <inheritdoc/>
+    [Effect(Effects.None)]
     public override int GetHashCode() =>
         HashCode.Combine(RuntimeHelpers.GetHashCode(World), Entity);
 

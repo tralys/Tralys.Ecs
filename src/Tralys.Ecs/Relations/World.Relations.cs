@@ -3,7 +3,8 @@ using System.Runtime.CompilerServices;
 namespace Tralys.Ecs;
 
 /// <summary>Thrown when an operation would leave a <see cref="TargetPolicy.Throw"/> relation's live source pointing at a destroyed
-/// target: destroying the target, parenting it under a dying entity, or relating to a dying entity. Nothing changed.</summary>
+/// target: destroying the target, parenting it under a dying entity, relating to a dying entity, or cancelling the destroy of a source
+/// whose target is dying. Nothing changed; from a playback, the command was dropped or the destroy spared.</summary>
 public sealed class TargetPolicyException(string message) : InvalidOperationException(message);
 
 public sealed partial class World
@@ -31,7 +32,8 @@ public sealed partial class World
 
     /// <summary>Adds the edge <paramref name="source"/> → <paramref name="target"/>, or, when the edge exists with a payload whose bytes
     /// differ, replaces the payload and logs <see cref="LogKind.RelationChanged"/>. An exclusive relation first drops the source's other
-    /// target; a symmetric one adds the mirror edge too.</summary>
+    /// target; a symmetric one adds the mirror edge too. Inside a query walk a new edge waits until the walk closes; a payload change
+    /// applies at once.</summary>
     [Effect(Effects.Mutates)]
     public void Relate<R>(
         Entity source,
@@ -51,72 +53,16 @@ public sealed partial class World
     {
         CheckWritable();
         var type = registry.IndexOf<R>();
-        if (RecordsEdge(source, target, type))
+        if (RecordsEdge<R>(source, target, type, adds: true))
         {
             RelatableStore<R>(source, target);
+            CheckRelatable(type, source, target, asRecorded: true);
             stage.RecordValue(CommandKind.Relate, source, payload, target);
             NoteRecordedEdge(source, target, type);
             return;
         }
         RelatableStore<R>(source, target).Relate(this, source, target, payload);
-    }
-
-    // Later edge writes on an end with an edge waiting wait too, or they would apply ahead of it.
-    readonly HashSet<(uint Entity, int Type)> recordedSources = [];
-    readonly HashSet<(uint Entity, int Type)> recordedTargets = [];
-
-    bool RecordsEdge(Entity source, Entity target, int type) =>
-        Reserved(source)
-        || Reserved(target)
-        || (
-            recordedSources.Count > 0
-            && (
-                recordedSources.Contains((source.Index, type))
-                || (!target.IsDefault && recordedTargets.Contains((target.Index, type)))
-            )
-        );
-
-    bool Reserved(Entity entity) =>
-        !entity.IsDefault
-        && allocator.IsCurrent(entity)
-        && allocator.Slots[entity.Index].State == LifecycleState.Reserved;
-
-    void NoteRecordedEdge(Entity source, Entity target, int type)
-    {
-        recordedSources.Add((source.Index, type));
-        if (!target.IsDefault)
-        {
-            recordedTargets.Add((target.Index, type));
-            if ((registry[type].RelationTraits & RelationTraits.Symmetric) != 0)
-            {
-                recordedSources.Add((target.Index, type));
-                recordedTargets.Add((source.Index, type));
-            }
-        }
-        allocator.Slots[source.Index].Pending = true;
-    }
-
-    internal bool RecordsRow<TRow>(Entity owner, CommandKind kind, in TRow row)
-        where TRow : struct
-    {
-        if (!Reserved(owner))
-            return false;
-        stage.RecordValue(kind, owner, row);
-        return true;
-    }
-
-    internal void CheckRowsExist(Entity owner)
-    {
-        if (Reserved(owner))
-            throw new InvalidOperationException(
-                $"{owner} was created by an observer and exists at playback; write its rows with Set and Remove, which wait for it."
-            );
-    }
-
-    internal void ForgetRecordedEdges()
-    {
-        recordedSources.Clear();
-        recordedTargets.Clear();
+        VerifyInvariants();
     }
 
     RelationStore<R> RelatableStore<R>(Entity source, Entity target)
@@ -124,25 +70,69 @@ public sealed partial class World
     {
         Slot(source);
         Slot(target);
-        var store = RelationsOf<R>();
-        if (store.Policy != TargetPolicy.Throw)
-            return store;
-        if (!IsLive(target) && IsLive(source))
-            ThrowDyingTarget<R>(target);
-        if (store.Symmetric && !IsLive(source) && IsLive(target))
-            ThrowDyingTarget<R>(source);
-        return store;
+        return RelationsOf<R>();
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    static void ThrowDyingTarget<R>(Entity target) =>
-        throw new TargetPolicyException(
-            $"{target} is being destroyed and {typeof(R).Name} forbids destroying a target with surviving sources."
+    internal void CheckRelatable(int type, Entity source, Entity target, bool asRecorded = false)
+    {
+        var lives = asRecorded
+            ? (LivesAsRecorded(source), LivesAsRecorded(target))
+            : (MayLive(source), MayLive(target));
+        if (Unrelatable(type, source, lives.Item1, target, lives.Item2) is { } error)
+            throw error;
+    }
+
+    internal TargetPolicyException? Unrelatable(
+        int type,
+        Entity source,
+        bool sourceLives,
+        Entity target,
+        bool targetLives
+    )
+    {
+        var descriptor = registry[type];
+        if (descriptor.OnTargetDestroyed != TargetPolicy.Throw)
+            return null;
+        if (sourceLives && !targetLives)
+            return DyingTarget(descriptor, target);
+        if (
+            (descriptor.RelationTraits & RelationTraits.Symmetric) != 0
+            && targetLives
+            && !sourceLives
+        )
+            return DyingTarget(descriptor, source);
+        return null;
+    }
+
+    static TargetPolicyException DyingTarget(ComponentDescriptor relation, Entity target) =>
+        new(
+            $"{target} is being destroyed and {relation.Name} forbids destroying a target with surviving sources."
         );
 
+    bool MayLive(Entity entity) => IsLive(entity) || DyingProvisionally(entity);
+
+    bool LivesAsRecorded(Entity entity) =>
+        allocator.IsCurrent(entity) && !AwayAsRecorded(entity, dying: true, detached: false);
+
+    bool DyingProvisionally(Entity entity)
+    {
+        if (provisional.Count == 0 || !allocator.IsCurrent(entity))
+            return false;
+        var dying = false;
+        for (var node = entity; !node.IsDefault; node = hierarchy.ParentOf(node))
+        {
+            if (allocator.Slots[node.Index].State != LifecycleState.PendingDestroy)
+                continue;
+            if (!provisional.Contains(node))
+                return false;
+            dying = true;
+        }
+        return dying;
+    }
+
     /// <summary>Removes the edge <paramref name="source"/> → <paramref name="target"/>, and its mirror for a symmetric relation; false
-    /// when there is none. Applies at once, even inside a query body, unless either end was created by an observer or has an edge
-    /// waiting, when it waits too and returns false.</summary>
+    /// when there is none. Applies at once unless a query walk is open, either end was created by an observer, or either end has an edge
+    /// waiting; then it waits too, until the walk closes or the next playback, and returns whether reads see the edge now.</summary>
     [Effect(Effects.Mutates)]
     public bool Unrelate<R>(
         Entity source,
@@ -154,17 +144,22 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
+        if (!allocator.IsCurrent(source) || !allocator.IsCurrent(target))
+            return false;
         var type = registry.IndexOf<R>();
-        if (RecordsEdge(source, target, type))
+        if (RecordsEdge<R>(source, target, type, adds: false))
         {
             stage.Record(CommandKind.Unrelate, source, type, other: target);
             NoteRecordedEdge(source, target, type);
-            return false;
+            return HasRelation<R>(source, target);
         }
         return FindRelations<R>()?.Unrelate(this, source, target, default) == true;
     }
 
-    /// <summary>Moves the edge to <paramref name="newTarget"/>, keeping its payload.</summary>
+    /// <summary>Moves the edge to <paramref name="newTarget"/>, keeping its payload; inside a query walk the move waits until the walk
+    /// closes.</summary>
+    /// <exception cref="InvalidOperationException"><paramref name="source"/> has no edge to <paramref name="oldTarget"/>, counting the
+    /// edge writes that wait.</exception>
     [Effect(Effects.Mutates)]
     public void Retarget<R>(
         Entity source,
@@ -177,15 +172,28 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
+        if (!allocator.IsCurrent(source) || !allocator.IsCurrent(oldTarget))
+            throw NoEdge<R>(source, oldTarget);
         var type = registry.IndexOf<R>();
-        if (RecordsEdge(source, oldTarget, type) || RecordsEdge(source, newTarget, type))
+        var waits = EdgeWaits(source, oldTarget, type) || TargetWaits(newTarget, type);
+        if (
+            !(
+                waits
+                    ? RelatedAsRecorded<R>(source, oldTarget, type)
+                    : HasRelation<R>(source, oldTarget)
+            )
+        )
+            throw NoEdge<R>(source, oldTarget);
+        if (waits || RecordsEdge(source, oldTarget, type))
         {
+            RelatableStore<R>(source, newTarget);
+            CheckRelatable(type, source, newTarget, asRecorded: true);
             stage.Record(
                 CommandKind.Retarget,
                 source,
                 type,
-                payload: stage.Retarget(oldTarget),
-                other: newTarget
+                other: newTarget,
+                oldTarget: oldTarget
             );
             NoteRecordedEdge(source, oldTarget, type);
             NoteRecordedEdge(source, newTarget, type);
@@ -195,13 +203,15 @@ public sealed partial class World
             FindRelations<R>() is not { } store
             || store.IndexOf(source, oldTarget) is not (var at and >= 0)
         )
-            throw new InvalidOperationException(
-                $"{source} has no {typeof(R).Name} edge to {oldTarget}."
-            );
+            throw NoEdge<R>(source, oldTarget);
         RelatableStore<R>(source, newTarget);
         var payload = store.EdgesOf(source)[at].Payload;
         store.Retarget(this, source, oldTarget, newTarget, payload);
+        VerifyInvariants();
     }
+
+    static InvalidOperationException NoEdge<R>(Entity source, Entity target) =>
+        new($"{source} has no {typeof(R).Name} edge to {target}.");
 
     /// <summary>The <typeparamref name="R"/> edge <paramref name="source"/> → <paramref name="target"/> exists.</summary>
     [Effect(Effects.None)]
@@ -248,7 +258,7 @@ public sealed partial class World
         return FindRelations<R>() is { } store ? store.ListSources(target) : default;
     }
 
-    /// <summary>Removes every <typeparamref name="R"/> edge from <paramref name="source"/>.</summary>
+    /// <summary>Removes every <typeparamref name="R"/> edge from <paramref name="source"/>; inside a query walk, once the walk closes.</summary>
     [Effect(Effects.Mutates)]
     public void ClearTargets<R>(
         Entity source,
@@ -259,6 +269,8 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
+        if (!allocator.IsCurrent(source))
+            return;
         var type = registry.IndexOf<R>();
         if (RecordsEdge(source, default, type))
         {
@@ -269,7 +281,7 @@ public sealed partial class World
         FindRelations<R>()?.ClearFrom(this, source, default);
     }
 
-    /// <summary>Removes every <typeparamref name="R"/> edge to <paramref name="target"/>.</summary>
+    /// <summary>Removes every <typeparamref name="R"/> edge to <paramref name="target"/>; inside a query walk, once the walk closes.</summary>
     [Effect(Effects.Mutates)]
     public void ClearSources<R>(
         Entity target,
@@ -280,12 +292,13 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
+        if (!allocator.IsCurrent(target))
+            return;
         var type = registry.IndexOf<R>();
-        if (Reserved(target) || recordedTargets.Contains((target.Index, type)))
+        if (RecordsEdge(default, target, type))
         {
             stage.Record(CommandKind.ClearSources, target, type);
-            recordedTargets.Add((target.Index, type));
-            allocator.Slots[target.Index].Pending = true;
+            NoteRecordedSources(target, type);
             return;
         }
         FindRelations<R>()?.ClearTo(this, target, default);
@@ -326,36 +339,16 @@ public sealed partial class World
 
     void CheckSurvivingSources(Entity root)
     {
+        if (SurvivorOf(root) is { } error)
+            throw error;
+    }
+
+    TargetPolicyException? SurvivorOf(Entity root)
+    {
         BeginDoomed();
         DoomSubtree(root, 1);
         DoomCascades();
-        ThrowOnSurvivor(finalising: false);
-    }
-
-    void CheckFinalisable(int batch)
-    {
-        BeginDoomed();
-        for (var i = 0; i < batch; i++)
-        {
-            var root = pendingDestroys[i];
-            ref var slot = ref allocator.Current(root);
-            if (!Unsafe.IsNullRef(ref slot) && slot.State == LifecycleState.PendingDestroy)
-                DoomSubtree(root, 1);
-        }
-        DoomCascades();
-        ThrowOnSurvivor(finalising: true);
-    }
-
-    void CheckFinalising()
-    {
-        BeginDoomed();
-        foreach (var entity in finalising)
-        {
-            ref var slot = ref allocator.Current(entity);
-            if (!Unsafe.IsNullRef(ref slot) && slot.State == LifecycleState.PendingDestroy)
-                Doom(entity, 1);
-        }
-        ThrowOnSurvivor(finalising: true);
+        return FindSurvivor();
     }
 
     void Doom(Entity entity, int wave)
@@ -370,14 +363,18 @@ public sealed partial class World
             Array.Resize(ref doomedWaves, Math.Max(allocator.Capacity, doomedWaves.Length * 2));
     }
 
-    void DoomSubtree(Entity root, int wave)
+    // With keepDying, a descendant pending destroy itself keeps its own fate, and so does its subtree.
+    void DoomSubtree(Entity root, int wave, bool keepDying = false)
     {
         var count = 0;
         Push(ref count, root);
         while (count > 0)
         {
             var entity = walk[--count];
-            if (doomedWaves[entity.Index] != 0)
+            if (
+                doomedWaves[entity.Index] != 0
+                || (keepDying && entity != root && OwnsDestroy(allocator.Slots[entity.Index]))
+            )
                 continue;
             Doom(entity, wave);
             foreach (var child in hierarchy.ChildrenOf(entity))
@@ -400,8 +397,8 @@ public sealed partial class World
         }
     }
 
-    // Same batch only: a cascade releases a batch later, and a pending source can still be rescued.
-    void ThrowOnSurvivor(bool finalising)
+    // A cascade releases a wave later and may yet be spared, so only a source of the same or an earlier wave goes first.
+    TargetPolicyException? FindSurvivor()
     {
         foreach (var store in relations)
         {
@@ -411,20 +408,19 @@ public sealed partial class World
             {
                 foreach (var source in store.SourcesOf(target))
                 {
-                    if (
-                        doomedWaves[source.Index] == doomedWaves[target.Index]
-                        || (finalising ? !allocator.IsCurrent(source) : !IsLive(source))
-                    )
+                    var wave = doomedWaves[source.Index];
+                    if ((wave != 0 && wave <= doomedWaves[target.Index]) || !IsLive(source))
                         continue;
                     EndDoomed();
                     var name = registry[store.Type].Name;
-                    throw new TargetPolicyException(
+                    return new TargetPolicyException(
                         $"{target} is the target of {name} from {source}, which outlives it; {name} forbids destroying a target with surviving sources."
                     );
                 }
             }
         }
         EndDoomed();
+        return null;
     }
 
     void EndDoomed()
@@ -432,6 +428,35 @@ public sealed partial class World
         foreach (var entity in doomed)
             doomedWaves[entity.Index] = 0;
         doomed.Clear();
+    }
+
+    TargetPolicyException? RevivalFault(Entity root)
+    {
+        if (!guardsTargets || !AnyThrowEdge())
+            return null;
+        BeginDoomed();
+        DoomSubtree(root, 1, keepDying: true);
+        foreach (var store in relations)
+        {
+            if (store is not { Policy: TargetPolicy.Throw })
+                continue;
+            foreach (var member in doomed)
+            {
+                for (var edge = store.EdgeCount(member) - 1; edge >= 0; edge--)
+                {
+                    var target = store.EdgeTarget(member, edge);
+                    if (doomedWaves[target.Index] != 0 || MayLive(target))
+                        continue;
+                    EndDoomed();
+                    var name = registry[store.Type].Name;
+                    return new TargetPolicyException(
+                        $"{member} cannot leave pending destroy while its {name} edge points at dying {target}; {name} forbids destroying a target with surviving sources."
+                    );
+                }
+            }
+        }
+        EndDoomed();
+        return null;
     }
 
     internal void Propagate(Entity entity, int type, ulong at)

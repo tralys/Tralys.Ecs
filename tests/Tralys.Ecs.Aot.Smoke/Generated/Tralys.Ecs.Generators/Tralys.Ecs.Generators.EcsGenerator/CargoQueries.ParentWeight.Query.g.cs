@@ -64,7 +64,11 @@ partial class CargoQueries
             for (var __bits = global::Tralys.Ecs.Generated.Plumbing.RowMask(in __chunk); __bits != 0; __bits &= __bits - 1)
             {
                 var __i = global::System.Numerics.BitOperations.TrailingZeroCount(__bits);
-                CargoQueries.ParentWeight(in __c0[__i], global::Tralys.Ecs.Generated.Plumbing.ParentTerm<global::Tralys.Ecs.Downstream.Fixture.Cargo>(__chunk.World, __entities[__i]), __arg_weights);
+                if (!global::Tralys.Ecs.Generated.Plumbing.Visits(in __chunk, __i)) continue;
+                var __p = global::Tralys.Ecs.Generated.Plumbing.Pending(in __chunk, __i);
+                var __e0 = __p ? global::Tralys.Ecs.Generated.Plumbing.Overlay(in __chunk, 0, __i) : -1;
+                ref var __v0 = ref __e0 > 0 ? ref global::Tralys.Ecs.Generated.Plumbing.Overlaid<global::Tralys.Ecs.Downstream.Fixture.Cargo>(in __chunk, 0, __i, out _, out _) : ref __c0[__i];
+                CargoQueries.ParentWeight(in __v0, global::Tralys.Ecs.Generated.Plumbing.ParentTerm<global::Tralys.Ecs.Downstream.Fixture.Cargo>(in __chunk, __entities[__i]), __arg_weights);
             }
         }
     }

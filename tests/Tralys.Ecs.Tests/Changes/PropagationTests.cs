@@ -90,4 +90,34 @@ public sealed partial class PropagationTests
 
         await Assert.That(world.Changes.RelatedVersionOf<Follows>(source)).IsGreaterThan(before);
     }
+
+    [Test]
+    public async Task Removing_a_propagating_component_below_a_root_raises_its_descendant_version()
+    {
+        using var world = TestWorlds.Create();
+        var root = world.Create();
+        var immediate = world.Create();
+        var recorded = world.Create();
+        foreach (var child in (Entity[])[immediate, recorded])
+        {
+            world.Set(child, new Stats());
+            world.SetParent(child, root);
+        }
+
+        world.AdvanceVersion();
+        var before = world.Changes.DescendantVersionOf(root);
+        world.Remove<Stats>(immediate);
+        var afterImmediate = world.Changes.DescendantVersionOf(root);
+        world.AdvanceVersion();
+        var buffer = world.RentBuffer(world.runSequence, 0);
+        buffer.Commands.Remove<Stats>(recorded);
+        world.Submit(buffer);
+        world.Playback(finalizeDestroys: false);
+
+        await Assert
+            .That(
+                (afterImmediate > before, world.Changes.DescendantVersionOf(root) > afterImmediate)
+            )
+            .IsEqualTo((true, true));
+    }
 }

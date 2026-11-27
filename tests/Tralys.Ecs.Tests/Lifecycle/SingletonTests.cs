@@ -92,4 +92,17 @@ public sealed class SingletonTests
         await Assert.That(world.Has<Clock>(to)).IsTrue();
         await Assert.That(world.GetSingleton<Clock>().Tick).IsEqualTo(2L);
     }
+
+    [Test]
+    public async Task A_singleton_set_after_its_owner_was_destroyed_survives_finalisation()
+    {
+        using var world = TestWorlds.Create();
+        world.SetSingleton(new Clock { Tick = 1 });
+        world.Destroy(world.SingletonEntity<Clock>());
+
+        world.SetSingleton(new Weather { Kind = 7 });
+        world.Playback();
+
+        await Assert.That(world.HasSingleton<Weather>()).IsTrue();
+    }
 }

@@ -25,6 +25,8 @@ static class Symbols
     public const string RowEdit = "Tralys.Ecs.RowEdit`2";
     public const string ScratchBuffer = "Tralys.Ecs.ScratchBuffer`1";
     public const string IComponent = "Tralys.Ecs.IComponent";
+    public const string IDeclared = "Tralys.Ecs.IDeclared";
+    public const string IRow = "Tralys.Ecs.IRow";
     public const string Query = "Tralys.Ecs.QueryAttribute";
     public const string Collect = "Tralys.Ecs.CollectAttribute";
     public const string With = "Tralys.Ecs.WithAttribute`1";
@@ -39,11 +41,17 @@ static class Symbols
     public const string Part = "Tralys.Ecs.PartAttribute`1";
     public const string World = "Tralys.Ecs.World";
     public const string WorldEntity = "Tralys.Ecs.WorldEntity";
+    public const string WorldReader = "Tralys.Ecs.WorldReader";
+    public const string RowsHandle = "Tralys.Ecs.Rows`2";
+    public const string ObserverContext = "Tralys.Ecs.ObserverContext";
+    public const string EntityView = "Tralys.Ecs.IEntityView`1";
     public const string Optional = "Tralys.Ecs.Optional`1";
     public const string OptionalRef = "Tralys.Ecs.OptionalRef`1";
     public const string ParentTerm = "Tralys.Ecs.Parent`1";
     public const string UpTerm = "Tralys.Ecs.Up`1";
     public const string ChunkContext = "Tralys.Ecs.ChunkContext";
+    public const string ChunkKernel = "Tralys.Ecs.IChunkKernel";
+    public const string ReducingKernel = "Tralys.Ecs.IReducingKernel`1";
     public const string SystemBase = "Tralys.Ecs.SystemBase";
     public const string Lookup = "Tralys.Ecs.Lookup`1";
     public const string RefLookup = "Tralys.Ecs.RefLookup`1";
@@ -51,7 +59,6 @@ static class Symbols
     public const string IndexLookup = "Tralys.Ecs.IndexLookup`1";
     public const string Reduction = "Tralys.Ecs.IReduction`1";
     public const string SystemSet = "Tralys.Ecs.SystemSetAttribute";
-    public const string Structural = "Tralys.Ecs.StructuralAttribute";
     public const string InSet = "Tralys.Ecs.InSetAttribute`1";
     public const string Schedule = "Tralys.Ecs.ScheduleAttribute";
     public const string ScheduleSet = "Tralys.Ecs.SetAttribute`1";
@@ -131,7 +138,9 @@ static class Symbols
     public static bool Has(ISymbol symbol, string metadataName) =>
         symbol.GetAttributes().Any(a => IsAttribute(a, metadataName));
 
-    /// <summary>What a query, view or system needs to know about a declared component or tag; null for any other type.</summary>
+    public static bool InRuntime(ISymbol symbol) =>
+        symbol.ContainingAssembly?.GetTypeByMetadataName(Effects.Attribute) is not null;
+
     static bool HoldsBuffer(ITypeSymbol type, int depth)
     {
         if (depth > 8)
@@ -156,6 +165,7 @@ static class Symbols
         return false;
     }
 
+    /// <summary>What a query, view or system needs to know about a declared component or tag; null for any other type.</summary>
     public static ComponentFacts? Facts(ITypeSymbol type)
     {
         if (type is not INamedTypeSymbol named)
@@ -171,9 +181,7 @@ static class Symbols
             {
                 declared = true;
                 facts.IsTag = true;
-                var kind = Named(attribute, "Kind", 0);
-                facts.IsEnableable |= kind == 1;
-                facts.IsSparse |= kind == 2;
+                facts.IsInherited = Named(attribute, "Inherited", false);
             }
             else if (IsAttribute(attribute, "Tralys.Ecs.StorageAttribute"))
                 facts.IsSparse |= attribute.ConstructorArguments.FirstOrDefault().Value is 1;
@@ -353,6 +361,7 @@ sealed class ComponentFacts
     public bool IsTag;
     public bool IsSparse;
     public bool IsEnableable;
+    public bool IsInherited;
     public bool IsReplaceOnly;
     public bool IsIndexed;
     public bool PropagatesChanges;

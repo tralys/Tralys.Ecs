@@ -141,45 +141,57 @@ public readonly struct WorldIntrospection
 
     /// <summary>Passes each stored component and tag of <paramref name="entity"/>, enabled or disabled (<see cref="World.Has{T}"/> tells
     /// which), to <paramref name="visitor"/>: archetype columns and tags in signature order, then sparse components and sparse tags. Adds waiting for playback are not visited. The visit is a
-    /// serial walk, so a structural change the visitor makes throws <see cref="InvalidOperationException"/>. Under NativeAOT the first
+    /// serial walk, so a structural change the visitor makes records and applies when the outermost walk closes. Under NativeAOT the first
     /// visit with a new visitor type allocates the runtime's dispatch entry; later ones allocate nothing.</summary>
     public void VisitEntity<TVisitor>(Entity entity, ref TVisitor visitor)
         where TVisitor : struct, IComponentVisitor
     {
         ref var slot = ref world.Slot(entity);
-        using var iteration = world.BeginIteration();
-        var registry = world.registry;
-        if (slot.Archetype is { } archetype)
+        var iteration = world.BeginIteration();
+        try
         {
-            foreach (var type in archetype.Types)
+            var registry = world.registry;
+            if (slot.Archetype is { } archetype)
             {
-                var descriptor = registry[type];
-                var column = archetype.ColumnSlot(type);
-                if (column >= 0)
-                    descriptor.Column.Visit(
-                        descriptor,
-                        ref archetype.RowRef(column, slot.Row),
-                        ref visitor
-                    );
-                else
-                    descriptor.Column.VisitDefault(descriptor, ref visitor);
+                foreach (var type in archetype.Types)
+                {
+                    var descriptor = registry[type];
+                    var column = archetype.ColumnSlot(type);
+                    if (column >= 0)
+                        descriptor.Column.Visit(
+                            descriptor,
+                            ref archetype.RowRef(column, slot.Row),
+                            ref visitor
+                        );
+                    else
+                        descriptor.Column.VisitDefault(descriptor, ref visitor);
+                }
+            }
+            if (slot.SparseCount == 0)
+                return;
+            foreach (var storage in world.sparse)
+            {
+                if (storage is null || storage.SlotOf(entity.Index) is not (var at and >= 0))
+                    continue;
+                var descriptor = registry[storage.Type];
+                descriptor.Column.Visit(descriptor, ref storage.RowRef(at), ref visitor);
+            }
+            foreach (var tags in world.sparseTags)
+            {
+                if (tags is null || !tags.Contains(entity.Index))
+                    continue;
+                var descriptor = registry[tags.Type];
+                descriptor.Column.VisitDefault(descriptor, ref visitor);
             }
         }
-        if (slot.SparseCount == 0)
-            return;
-        foreach (var storage in world.sparse)
+        catch (Exception error)
         {
-            if (storage is null || storage.SlotOf(entity.Index) is not (var at and >= 0))
-                continue;
-            var descriptor = registry[storage.Type];
-            descriptor.Column.Visit(descriptor, ref storage.RowRef(at), ref visitor);
+            iteration.Fault(error);
+            throw;
         }
-        foreach (var tags in world.sparseTags)
+        finally
         {
-            if (tags is null || !tags.Contains(entity.Index))
-                continue;
-            var descriptor = registry[tags.Type];
-            descriptor.Column.VisitDefault(descriptor, ref visitor);
+            iteration.Dispose();
         }
     }
 

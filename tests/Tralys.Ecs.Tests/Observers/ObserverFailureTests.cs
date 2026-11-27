@@ -14,63 +14,6 @@ public sealed class ObserverFailureTests
             throw new ApplicationException("destroy observer failed");
     }
 
-    sealed class Redestroys(Entity target) : IDestroyObserver
-    {
-        public void OnDestroy(in ObserverContext context, Entity entity)
-        {
-            if (entity != target)
-                return;
-            context.World.CancelDestroy(target);
-            context.World.Destroy(target);
-        }
-    }
-
-    [Test]
-    public async Task A_child_destroyed_again_by_an_observer_stays_pending_when_finalising_fails()
-    {
-        using var world = TestWorlds.Create();
-        var root = world.Create();
-        var child = world.Create();
-        world.SetParent(child, root);
-        world.Destroy(root);
-        var redestroys = world.Observers.OnDestroy(new Redestroys(child));
-        var throws = world.Observers.OnDestroy(new ThrowsOnDestroy());
-
-        await Assert.That(() => world.Playback()).Throws<AggregateException>();
-        world.Observers.Remove(redestroys);
-        world.Observers.Remove(throws);
-
-        await Assert
-            .That((world.StateOf(child), world.CancelDestroy(child)))
-            .IsEqualTo((LifecycleState.PendingDestroy, true));
-    }
-
-    sealed class Rescues(Entity rescued) : IDestroyObserver
-    {
-        public void OnDestroy(in ObserverContext context, Entity entity) =>
-            context.World.CancelDestroy(rescued);
-    }
-
-    [Test]
-    public async Task A_child_of_a_rescued_root_is_back_in_its_indexes_when_finalising_fails()
-    {
-        using var world = TestWorlds.Create();
-        var root = world.Create();
-        var child = world.Create();
-        world.Set(child, new Badge { Number = 5 });
-        world.SetParent(child, root);
-        world.Destroy(root);
-        var rescues = world.Observers.OnDestroy(new Rescues(root));
-        var throws = world.Observers.OnDestroy(new ThrowsOnDestroy());
-
-        await Assert.That(() => world.Playback()).Throws<AggregateException>();
-        world.Observers.Remove(rescues);
-        world.Observers.Remove(throws);
-        world.BadgeByNumber().TryGet(5, out var found);
-
-        await Assert.That(found).IsEqualTo(child);
-    }
-
     [Test]
     public async Task A_throwing_add_observer_leaves_the_world_outside_iteration()
     {
@@ -85,15 +28,20 @@ public sealed class ObserverFailureTests
     }
 
     [Test]
-    public async Task A_throwing_destroy_observer_during_extract_leaves_the_world_outside_iteration()
+    public async Task A_throwing_destroy_observer_during_extract_is_reported_with_the_image()
     {
         using var world = TestWorlds.Create();
         var root = world.Create();
         var id = world.Observers.OnDestroy(new ThrowsOnDestroy());
 
-        await Assert.That(() => world.Extract([root])).Throws<ApplicationException>();
+        var result = world.Extract([root]);
         world.Observers.Remove(id);
 
+        await Assert.That(result.Image.EntityCount).IsEqualTo(1);
+        await Assert
+            .That(result.ObserverFailures?.InnerExceptions.Single())
+            .IsTypeOf<ApplicationException>();
+        await Assert.That(world.Exists(root)).IsFalse();
         await Assert.That(world.StateOf(world.Create())).IsEqualTo(LifecycleState.Alive);
     }
 
@@ -111,17 +59,14 @@ public sealed class ObserverFailureTests
     }
 
     [Test]
-    public async Task A_destroy_whose_observer_threw_finalises_at_the_next_playback()
+    public async Task A_destroy_whose_observer_threw_is_released_by_the_playback_that_rethrows()
     {
         using var world = TestWorlds.Create();
-        var id = world.Observers.OnDestroy(new ThrowsOnDestroy());
+        world.Observers.OnDestroy(new ThrowsOnDestroy());
         var entity = world.Create();
         world.Destroy(entity);
 
         await Assert.That(() => world.Playback()).Throws<ApplicationException>();
-        world.Observers.Remove(id);
-        world.Playback();
-
         await Assert.That(world.Exists(entity)).IsFalse();
     }
 

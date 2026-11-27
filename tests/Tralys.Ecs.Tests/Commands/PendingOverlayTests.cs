@@ -113,4 +113,26 @@ public sealed class PendingOverlayTests
 
         await Assert.That(threw).IsTrue();
     }
+
+    [Test]
+    public async Task An_edit_of_a_waiting_value_left_open_across_a_playback_throws()
+    {
+        using var world = TestWorlds.Create();
+        var entity = world.Create();
+        using (world.BeginDelivery())
+            world.Set(entity, new Dialog { Page = 1 });
+
+        await Assert
+            .That(() => EditAcrossPlayback(world, entity))
+            .Throws<InvalidOperationException>();
+    }
+
+#pragma warning disable TECS0019
+    static void EditAcrossPlayback(World world, Entity entity)
+    {
+        using var edit = world.Edit<Dialog>(entity);
+        world.Playback();
+        edit.Value.Page = 5;
+    }
+#pragma warning restore TECS0019
 }

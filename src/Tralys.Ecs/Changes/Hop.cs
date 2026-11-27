@@ -4,6 +4,7 @@ namespace Tralys.Ecs;
 public interface IHop
 {
     /// <summary>Adds each entity <paramref name="holder"/>'s change reaches; called only while the holder exists.</summary>
+    [Effect(Effects.None)]
     static abstract void Route(World world, Entity holder, List<Entity> into);
 }
 

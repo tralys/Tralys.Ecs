@@ -53,25 +53,33 @@ public sealed class CancelledCreateTests
         await Assert.That(world.SerialByCode().Contains(3)).IsFalse();
     }
 
+    static void CreateRelateDestroy(World world, Entity other)
+    {
+        var created = world.Create();
+        world.Relate<Follows>(created, other);
+        world.Relate<Follows>(other, created);
+        world.EffectRows(created).Set(new Effect { Kind = 1 });
+        world.Destroy(created);
+    }
+
+    static List<LogKind> Kinds(LogTail tail) => [.. tail.Read().Select(e => e.Kind)];
+
     [Test]
-    public async Task Edges_and_rows_on_an_entity_created_and_destroyed_in_a_body_are_never_logged()
+    public async Task Edges_and_rows_on_an_entity_created_and_destroyed_in_a_body_log_as_immediate_calls_do()
     {
         using var world = TestWorlds.Logged();
         var other = world.Create();
         var tail = new LogTail(world);
         using (world.BeginDelivery())
-        {
-            var created = world.Create();
-            world.Relate<Follows>(created, other);
-            world.Relate<Follows>(other, created);
-            world.EffectRows(created).Set(new Effect { Kind = 1 });
-            world.Destroy(created);
-        }
+            CreateRelateDestroy(world, other);
         world.Playback();
 
-        var kinds = new List<LogKind>();
-        foreach (var entry in tail.Read())
-            kinds.Add(entry.Kind);
-        await Assert.That(kinds).IsEmpty();
+        using var twin = TestWorlds.Logged();
+        var twinOther = twin.Create();
+        var twinTail = new LogTail(twin);
+        CreateRelateDestroy(twin, twinOther);
+        twin.Playback();
+
+        await Assert.That(Kinds(tail)).IsEquivalentTo(Kinds(twinTail));
     }
 }

@@ -48,6 +48,28 @@ public sealed class ChangeWatchTests
     }
 
     [Test]
+    public async Task An_entity_back_from_detached_routes_each_input_through_its_hop()
+    {
+        using var world = TestWorlds.Create();
+        var parent = world.Create();
+        var child = world.Create();
+        world.Set(child, new Health { Value = 1 });
+        world.SetParent(child, parent);
+        var watch = world.Changes.Watch<Owed, EveryHealth>(
+            "hop-reentry",
+            static w => w.Component<Health>(Owed.Followers, Hop.Parent)
+        );
+        var owed = new ChangeSet<Owed>();
+
+        world.Detach(child);
+        world.Set(child, new Health { Value = 2 });
+        world.Reattach(child);
+        watch.Collect(owed);
+
+        await Assert.That(owed.MarksOf(parent)).IsEqualTo(Owed.Followers);
+    }
+
+    [Test]
     public async Task A_change_to_a_detached_entity_marks_nothing_while_it_is_away()
     {
         using var world = TestWorlds.Create();
@@ -140,6 +162,32 @@ public sealed class ChangeWatchTests
 
         await Assert.That(afterReset).IsEqualTo(Owed.All);
         await Assert.That(owed.MarksOf(fresh)).IsEqualTo(Owed.Health);
+    }
+
+    [Test]
+    public async Task A_mark_made_by_hand_after_a_reset_or_a_clear_survives_the_next_collect()
+    {
+        using var world = TestWorlds.Create();
+        var baseline = world.Snapshot();
+        var watch = world.Changes.Watch<Owed, EveryHealth>(
+            "by hand",
+            static w => w.Component<Health>(Owed.Health)
+        );
+        var owed = new ChangeSet<Owed>();
+        watch.Collect(owed);
+
+        world.Reset(baseline);
+        var afterReset = world.Create();
+        owed.Mark(afterReset, Owed.Rows);
+        watch.Collect(owed);
+        var keptAfterReset = owed.IsMarked(afterReset, Owed.Rows);
+        world.Clear();
+        var afterClear = world.Create();
+        owed.Mark(afterClear, Owed.Rows);
+        watch.Collect(owed);
+
+        await Assert.That(keptAfterReset).IsTrue();
+        await Assert.That(owed.IsMarked(afterClear, Owed.Rows)).IsTrue();
     }
 
     [Test]
@@ -397,5 +445,26 @@ public sealed class ChangeWatchTests
         });
 
         await Assert.That(bytes).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task A_route_to_a_detached_source_marks_nothing()
+    {
+        using var world = TestWorlds.Create();
+        var leader = world.Create();
+        world.Set(leader, new Health { Value = 1 });
+        var follower = world.Create();
+        world.Relate<Follows>(follower, leader);
+        var watch = world.Changes.Watch<Owed, EveryHealth>(
+            "hop",
+            static w => w.Component<Health>(Owed.Followers, Hop.Sources<Follows>())
+        );
+        var owed = new ChangeSet<Owed>();
+
+        world.Detach(follower);
+        world.Set(leader, new Health { Value = 2 });
+        watch.Collect(owed);
+
+        await Assert.That(owed.IsMarked(follower, Owed.Followers)).IsFalse();
     }
 }

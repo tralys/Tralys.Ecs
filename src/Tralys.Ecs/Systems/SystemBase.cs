@@ -149,8 +149,3 @@ public sealed class SystemDescriptor(
 /// <summary>Declares a <see cref="SystemBase"/> subclass to the generator.</summary>
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class SystemAttribute : Attribute;
-
-/// <summary>Marks a helper that changes structure through the <see cref="World"/> it takes; a serial query body or a
-/// <see cref="CollectAttribute"/> predicate may not call it, and a parallel body only if it also takes a <see cref="Commands"/> (TECS0045).</summary>
-[AttributeUsage(AttributeTargets.Method, Inherited = false)]
-public sealed class StructuralAttribute : Attribute;

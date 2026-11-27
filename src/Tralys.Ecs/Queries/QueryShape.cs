@@ -61,6 +61,10 @@ internal sealed class QueryShape
                     throw new InvalidOperationException(
                         $"{descriptor.Name} carries no change stamps, so Changed can never match it."
                     );
+                case TermKind.Changed when Inherited[t] > 0:
+                    throw new InvalidOperationException(
+                        $"{descriptor.Name} is an inherited tag, which a row can match through an ancestor that carries the stamp, so Changed cannot follow it."
+                    );
             }
             if (storage is not (StorageClass.Sparse or StorageClass.SparseTag))
                 continue;

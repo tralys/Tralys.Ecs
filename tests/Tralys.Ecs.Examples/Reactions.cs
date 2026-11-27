@@ -16,7 +16,7 @@ public sealed class MovedPositions(World world)
         var sample = world.Changes.Sample(cursor);
         foreach (var change in sample.Changed<Position>())
             moved.Add(change.Entity);
-        world.Changes.Commit(cursor, sample.Until);
+        world.Changes.Commit(cursor, sample.Window);
         return moved.Count;
     }
 }

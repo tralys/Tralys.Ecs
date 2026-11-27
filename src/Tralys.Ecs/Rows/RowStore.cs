@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Tralys.Ecs;
@@ -39,7 +40,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
 {
     const int IndexAbove = 8;
 
-    internal sealed class Block(bool stamped)
+    internal sealed class Block(bool stamped) : IMoveCount
     {
         public readonly bool Stamped = stamped;
         public Entity Owner;
@@ -52,7 +53,11 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         public int Iterating;
         public int Editing;
 
+        // Bumped whenever Iterating and Editing are reset, so an iteration or edit opened before ends without touching them.
+        public int Generation;
+
         // Bumped whenever rows move, so an open edit can tell its ref went stale.
+        [Effect(Effects.MovesRowBlocks)]
         public int Moves;
         public ulong Presence;
         public Dictionary<TKey, int>? Index;
@@ -63,8 +68,18 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         public int Older = -1;
         public bool Raised;
 
+        int IMoveCount.MoveCount => Moves;
+
+        public void Invalidate()
+        {
+            Iterating = 0;
+            Editing = 0;
+            Generation++;
+            Moves++;
+        }
+
         // The row, dead and, when stamped, stamp arrays grow together, so they keep one length.
-        public void Load(Block source)
+        public void CopyFrom(Block source)
         {
             Owner = source.Owner;
             Slot = source.Slot;
@@ -92,9 +107,6 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             Copies.Load(ref Dead, source.Dead, source.Count);
             Count = source.Count;
             Live = source.Live;
-            Iterating = 0;
-            Editing = 0;
-            Moves = source.Moves;
             Presence = source.Presence;
             Copies.Load(ref Index, source.Index);
         }
@@ -156,18 +168,24 @@ internal sealed class RowStore<TKey, TRow> : RowStore
     public override RowStore Clone()
     {
         var copy = new RowStore<TKey, TRow>(this);
-        copy.Load(this);
+        copy.CopyFrom(this);
         return copy;
     }
 
     public override void Load(RowStore other)
     {
-        var source = (RowStore<TKey, TRow>)other;
+        for (var i = 0; i < blockCount; i++)
+            blocks[i].Invalidate();
+        CopyFrom((RowStore<TKey, TRow>)other);
+    }
+
+    void CopyFrom(RowStore<TKey, TRow> source)
+    {
         map.Load(source.map);
         if (blocks.Length < source.blockCount)
             Array.Resize(ref blocks, source.blocks.Length);
         for (var i = 0; i < source.blockCount; i++)
-            (blocks[i] ??= new Block(tracked)).Load(source.blocks[i]);
+            (blocks[i] ??= new Block(tracked)).CopyFrom(source.blocks[i]);
         Array.Clear(blocks, source.blockCount, blocks.Length - source.blockCount);
         blockCount = source.blockCount;
         Copies.Load(freeBlocks, source.freeBlocks);
@@ -263,6 +281,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
 
     int Insert(Block block, in TKey key, LifecycleReason reason)
     {
+        Serial();
         CheckNotEditing(block);
         if (block.Count == block.Rows.Length)
             Grow(block);
@@ -296,6 +315,13 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             reason
         );
 
+    [Conditional("DEBUG")]
+    void Serial() =>
+        Debug.Assert(
+            world.parallelDepth == 0,
+            "A partitioned query body wrote rows bookkeeping its workers share."
+        );
+
     void CheckNotEditing(Block block)
     {
         if (block.Editing > 0)
@@ -304,16 +330,25 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             );
     }
 
-    public void BeginEdit(Block block) => block.Editing++;
-
-    public void EndEdit(Block block)
+    public int BeginEdit(Block block)
     {
+        Serial();
+        block.Editing++;
+        return block.Generation;
+    }
+
+    public void EndEdit(Block block, int generation)
+    {
+        Serial();
+        if (block.Generation != generation)
+            return;
         if (--block.Editing == 0 && block.Iterating == 0 && block.Live != block.Count)
             Compact(block);
     }
 
     public void Stamp(Block block, int at)
     {
+        Serial();
         if (tracked && world.Tracking)
         {
             block.Changed[at] = world.version;
@@ -339,6 +374,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
     // A settle moves raised blocks ahead of an open walk, which then never reaches them.
     public int BeginWalk()
     {
+        Serial();
         if (walking)
             throw new InvalidOperationException(
                 $"A ChangedRows walk of {world.registry[Type].Name} is already open; finish or dispose it before starting another."
@@ -347,7 +383,11 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         return Settle();
     }
 
-    public void EndWalk() => walking = false;
+    public void EndWalk()
+    {
+        Serial();
+        walking = false;
+    }
 
     int Settle()
     {
@@ -389,6 +429,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
 
     public void Remove(Block block, int at, LifecycleReason reason)
     {
+        Serial();
         CheckNotEditing(block);
         var departing = block.Rows[at];
         var key = departing.RowKey;
@@ -414,6 +455,7 @@ internal sealed class RowStore<TKey, TRow> : RowStore
 
     public void RemoveAll(Block block, LifecycleReason reason)
     {
+        Serial();
         CheckNotEditing(block);
         for (var at = 0; at < block.Count; at++)
         {
@@ -428,8 +470,17 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             Compact(block);
     }
 
-    public void EndIteration(Block block)
+    public static int BeginIteration(Block block)
     {
+        block.Iterating++;
+        return block.Generation;
+    }
+
+    public void EndIteration(Block block, int generation)
+    {
+        Serial();
+        if (block.Generation != generation)
+            return;
         if (--block.Iterating == 0 && block.Editing == 0 && block.Live != block.Count)
             Compact(block);
     }
@@ -616,6 +667,8 @@ internal sealed class RowStore<TKey, TRow> : RowStore
         block.Presence = 0;
         block.Index = null;
         block.Iterating = 0;
+        block.Generation++;
+        block.Moves++;
         map.Remove(entity.Index);
         freeBlocks.Push(slot);
     }
@@ -628,6 +681,8 @@ internal sealed class RowStore<TKey, TRow> : RowStore
             var block = blocks[i];
             Array.Clear(block.Rows, 0, block.Count);
             block.Count = block.Live = block.Iterating = block.Editing = 0;
+            block.Generation++;
+            block.Moves++;
             block.Owner = default;
             block.Presence = 0;
             block.Index = null;

@@ -43,6 +43,13 @@ public readonly record struct DanglingReference(
 public interface IReferenceFaultSink
 {
     /// <summary>Called once per dangling reference found after a playback; a playback the sink runs is not verified.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnDanglingReference(in DanglingReference reference);
 }
 

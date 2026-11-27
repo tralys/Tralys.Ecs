@@ -4,8 +4,13 @@ namespace Tralys.Ecs.Generated;
 /// offset.</summary>
 public readonly unsafe struct BufferOps
 {
+    [Effect(Effects.Mutates)]
     readonly delegate* <World, ref byte, void> free;
+
+    [Effect(Effects.None)]
     readonly delegate* <World, ref byte, byte[]?> copy;
+
+    [Effect(Effects.Mutates)]
     readonly delegate* <World, ReadOnlySpan<byte>, ref byte, void> allocate;
     internal readonly int ElementSize;
 

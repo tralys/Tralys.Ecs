@@ -15,6 +15,11 @@ internal abstract class RelationStore(int type, ComponentDescriptor descriptor)
 
     public abstract bool HasTargets { get; }
 
+    // A free node reads as the null entity.
+    public abstract int TargetNodes { get; }
+
+    public abstract Entity TargetNode(int node);
+
     public abstract void ApplyRelate(
         World world,
         Entity source,
@@ -30,7 +35,7 @@ internal abstract class RelationStore(int type, ComponentDescriptor descriptor)
         LifecycleReason reason
     );
 
-    public abstract void ReleaseEntity(World world, Entity entity);
+    public abstract void ReleaseEntity(World world, Entity entity, LifecycleReason reason);
 
     public abstract void ClearFrom(World world, Entity source, LifecycleReason reason);
 
@@ -140,6 +145,10 @@ internal sealed class RelationStore<R> : RelationStore
 
     public override bool HasTargets => targetCount > freeTargets.Count;
 
+    public override int TargetNodes => targetCount;
+
+    public override Entity TargetNode(int node) => targets[node].Entity;
+
     public override int EdgeCount(Entity source) => EdgesOf(source).Length;
 
     public override Entity EdgeTarget(Entity source, int edge) => EdgesOf(source)[edge].Target;
@@ -174,6 +183,12 @@ internal sealed class RelationStore<R> : RelationStore
         in R payload,
         LifecycleReason reason = default
     )
+    {
+        world.CheckRelatable(Type, source, target);
+        Join(world, source, target, payload, reason);
+    }
+
+    void Join(World world, Entity source, Entity target, in R payload, LifecycleReason reason)
     {
         Link(world, source, target, payload, reason);
         if (Symmetric && source != target)
@@ -278,10 +293,11 @@ internal sealed class RelationStore<R> : RelationStore
         in R payload
     )
     {
+        world.CheckRelatable(Type, source, newTarget);
         Unlink(world, source, oldTarget, default, release: false);
         if (Symmetric && source != oldTarget)
             Unlink(world, oldTarget, source, default, release: false);
-        Relate(world, source, newTarget, payload);
+        Join(world, source, newTarget, payload, default);
     }
 
     bool Unlink(World world, Entity source, Entity target, LifecycleReason reason, bool release)
@@ -324,30 +340,17 @@ internal sealed class RelationStore<R> : RelationStore
             Unrelate(world, list[0], target, reason);
     }
 
-    public override void ReleaseEntity(World world, Entity entity)
+    public override void ReleaseEntity(World world, Entity entity, LifecycleReason reason)
     {
-        var reason = world.allocator.Slots[entity.Index].DestroyReason;
-        ClearFrom(world, entity, reason);
         var incoming = SourcesOf(entity);
-        if (!incoming.IsEmpty)
-        {
-            var count = incoming.Length;
-            if (scratch.Length < count)
-                scratch = new Entity[Math.Max(count, scratch.Length * 2)];
-            incoming.CopyTo(scratch);
-            for (var i = 0; i < count; i++)
-            {
-                var source = scratch[i];
-                Unrelate(world, source, entity, reason);
-                if (
-                    Policy == TargetPolicy.DestroySource
-                    && !world.extracting
-                    && world.Exists(source)
-                )
-                    world.DestroyEntity(source, LifecycleReason.Cascade, guardTargets: false);
-            }
-            Array.Clear(scratch, 0, count);
-        }
+        var count = incoming.Length;
+        if (scratch.Length < count)
+            scratch = new Entity[Math.Max(count, scratch.Length * 2)];
+        incoming.CopyTo(scratch);
+        ClearFrom(world, entity, reason);
+        for (var i = 0; i < count; i++)
+            Unrelate(world, scratch[i], entity, reason);
+        Array.Clear(scratch, 0, count);
         Free(sources, sourceMap, freeSources, edges, entity);
     }
 

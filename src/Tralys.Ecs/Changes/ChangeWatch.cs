@@ -3,7 +3,8 @@ using System.Runtime.InteropServices;
 namespace Tralys.Ecs;
 
 /// <summary>A change cursor that turns its declared inputs into marks on the entities owing work: it samples, routes each change through
-/// its <see cref="Hop"/>, marks the whole of an entity back from detached, pending destroy or a restore, marks everything when its queue
+/// its <see cref="Hop"/>, marks the whole of an entity back from detached, pending destroy or a restore and routes each input's hop from
+/// it, marks everything when its queue
 /// overflowed or the world was reset to a snapshot, forgets destroyed entities and commits, so its consumer never walks the changes
 /// itself.</summary>
 public sealed class ChangeWatch<TBits> : IDisposable
@@ -19,6 +20,7 @@ public sealed class ChangeWatch<TBits> : IDisposable
     readonly Func<World, Entity, TBits> whole;
     readonly List<Entity> holders = [];
     readonly List<Entity> routed = [];
+    bool disposed;
 
     internal ChangeWatch(
         World world,
@@ -48,58 +50,94 @@ public sealed class ChangeWatch<TBits> : IDisposable
         queue = world.changes.Subscribe(cursor, kinds, owners.Length > 0);
     }
 
-    /// <summary>Marks into <paramref name="into"/> what changed since the last collect, and forgets each entity destroyed since.</summary>
+    /// <summary>Marks into <paramref name="into"/> what changed since the last collect, and forgets each entity destroyed since. An entity
+    /// gone, pending destroy or detached as the watch collects is marked for nothing, and the scope is never asked about one. What the
+    /// scope or a route changes during the collect is marked at the next; if one throws, the next collect marks everything.</summary>
+    [Effect(Effects.Mutates)]
     public void Collect(ChangeSet<TBits> into)
     {
         var changes = world.Changes;
         var sample = changes.Sample(cursor);
-        if (queue.Overflowed)
-            everything(world, into);
-        else
+        into.Join(world.changes);
+        var overflowed = queue.Take(out var events, out var raised);
+        try
         {
-            foreach (var input in inputs)
+            if (overflowed)
             {
-                if (input.Changed is not { } changed)
-                    continue;
-                changed(in sample, holders);
-                foreach (var holder in holders)
-                    Route(in input, holder, into);
-                holders.Clear();
+                everything(world, into);
+                into.ForgetGone(world);
             }
-
-            foreach (ref readonly var change in CollectionsMarshal.AsSpan(queue.Events))
+            else
             {
-                if (change.Type >= 0)
+                foreach (var input in inputs)
                 {
-                    if (byType[change.Type] is { } typed && world.Admits(change.Entity, default))
+                    if (input.Changed is not { } changed)
+                        continue;
+                    changed(in sample, holders);
+                    foreach (var holder in holders)
+                        Route(in input, holder, into);
+                    holders.Clear();
+                }
+
+                foreach (ref readonly var change in CollectionsMarshal.AsSpan(events))
+                {
+                    if (WatchQueue.Forgets.Has(change.Kind))
+                        into.Forget(change.Entity);
+                    else if (!Admitted(change.Entity))
+                        continue;
+                    else if (change.Type < 0)
+                        Resync(change.Entity, into);
+                    else if (byType[change.Type] is { } typed)
+                    {
                         foreach (var input in typed)
                             if (input.Entries.Has(change.Kind))
                                 Route(in input, change.Entity, into);
+                    }
                 }
-                else if (WatchQueue.Resyncs.Has(change.Kind))
-                    Mark(into, change.Entity, ChangeSet<TBits>.Bits(whole(world, change.Entity)));
-                else
-                    into.Forget(change.Entity);
-            }
 
-            foreach (var owner in queue.Raised)
-            {
-                if (!world.Exists(owner) || !world.Admits(owner, default))
-                    continue;
-                foreach (var (holds, bits) in owners)
-                    if (holds(world, owner))
-                        Mark(into, owner, bits);
+                foreach (var owner in raised)
+                {
+                    if (!Admitted(owner))
+                        continue;
+                    foreach (var (holds, bits) in owners)
+                        if (holds(world, owner))
+                            Mark(into, owner, bits);
+                }
             }
         }
-        queue.Clear();
-        changes.Commit(cursor, sample.Until);
+        catch
+        {
+            holders.Clear();
+            routed.Clear();
+            queue.Overflow();
+            throw;
+        }
+        changes.Commit(cursor, sample.Window);
     }
 
-    /// <summary>Unregisters the watch's cursor and stops its queue; the watch is dead from then on.</summary>
+    /// <summary>Unregisters the watch's cursor and stops its queue; the watch is dead from then on, and a second dispose does
+    /// nothing.</summary>
+    [Effect(Effects.Mutates)]
     public void Dispose()
     {
+        if (disposed)
+            return;
         world.changes.Unsubscribe(queue);
         world.Changes.Unregister(cursor);
+        disposed = true;
+    }
+
+    bool Admitted(Entity entity) => world.Exists(entity) && world.Admits(entity, default);
+
+    // Changes made while the entity was away reached no route, so each input owes its hop's entities as if it had changed.
+    void Resync(Entity entity, ChangeSet<TBits> into)
+    {
+        Mark(into, entity, ChangeSet<TBits>.Bits(whole(world, entity)));
+        foreach (var input in inputs)
+        {
+            if (input.Route is not null)
+                Route(in input, entity, into);
+        }
     }
 
     void Route(in WatchInput input, Entity holder, ChangeSet<TBits> into)
@@ -119,7 +157,7 @@ public sealed class ChangeWatch<TBits> : IDisposable
 
     void Mark(ChangeSet<TBits> into, Entity entity, ulong bits)
     {
-        if (bits != 0 && !entity.IsDefault && world.Exists(entity))
+        if (bits != 0 && !entity.IsDefault && Admitted(entity))
             into.Mark(entity, ChangeSet<TBits>.From(bits));
     }
 }

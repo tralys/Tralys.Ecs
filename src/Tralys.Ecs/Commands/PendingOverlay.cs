@@ -5,6 +5,10 @@ internal sealed class PendingOverlay
     // A pending enable flip of a stored component: the value stays in storage, only the bit is overlaid.
     public const int Stored = -2;
 
+    // Entry types below zero mark an entity's recorded lifecycle rather than a component.
+    public const int Destroying = -1;
+    public const int Detaching = -3;
+
     struct Entry
     {
         public int Type;
@@ -19,6 +23,8 @@ internal sealed class PendingOverlay
     int count;
 
     public bool IsEmpty => heads.Count == 0;
+
+    public bool HasLifecycle { get; private set; }
 
     int IndexOf(uint entity, int type, out int head)
     {
@@ -63,6 +69,15 @@ internal sealed class PendingOverlay
         entries[at].Payload = payload;
     }
 
+    public void Mark(uint entity, int lifecycle, bool on)
+    {
+        Set(entity, lifecycle, on, -1);
+        HasLifecycle = true;
+    }
+
+    public bool Marked(uint entity, int lifecycle, bool unmarked) =>
+        IndexOf(entity, lifecycle, out _) is var at and >= 0 ? entries[at].Present : unmarked;
+
     public IEnumerable<uint> Adding(int type)
     {
         foreach (var (entity, head) in heads)
@@ -82,17 +97,26 @@ internal sealed class PendingOverlay
             entries[at].Enabled = enabled;
     }
 
+    // A flip with no entry yet leaves the value in storage and overlays only the bit.
+    public void Flip(uint entity, int type, bool enabled)
+    {
+        if (IndexOf(entity, type, out _) < 0)
+            Set(entity, type, true, Stored);
+        SetEnabled(entity, type, enabled);
+    }
+
     public void Drop(uint entity)
     {
         heads.Remove(entity);
         // A closed batch leaves nothing staged, so no playback would ever Clear the entries it wrote.
         if (heads.Count == 0)
-            count = 0;
+            Clear();
     }
 
     public void Clear()
     {
         heads.Clear();
         count = 0;
+        HasLifecycle = false;
     }
 }

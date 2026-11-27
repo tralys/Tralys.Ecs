@@ -135,6 +135,13 @@ static class QueryModelBuilder
                     Fail($"'{Symbols.Name(type)}' in a filter is not a declared component or tag");
                     continue;
                 }
+                if (kind == TermKind.Changed && facts.IsInherited)
+                {
+                    Fail(
+                        $"'{Symbols.Name(type)}' is an inherited tag, which a row can match through an ancestor that carries the stamp, so Changed cannot follow it; watch it with a ChangeWatch instead"
+                    );
+                    continue;
+                }
                 terms.Add(
                     new TermModel(
                         Symbols.Full(type),
@@ -239,6 +246,13 @@ static class QueryModelBuilder
 
         Problem Invalid(string why) => new(Diagnostics.InvalidQueryParameter, null, "", why);
 
+        if (parallel && (Symbols.Is(type, Symbols.World) || Symbols.Is(type, Symbols.WorldEntity)))
+        {
+            problem = Invalid(
+                $"a parallel body cannot take a {type.Name}, since its workers may not write the world; read through a WorldReader parameter and record changes through Commands"
+            );
+            return null;
+        }
         if (Symbols.Has(p, Symbols.Arg))
         {
             if (p.RefKind is RefKind.Ref or RefKind.Out)
@@ -269,7 +283,7 @@ static class QueryModelBuilder
                 if (parallel)
                     return Make(ParamKind.Commands);
                 problem = Invalid(
-                    "only a parallel body records through Commands; a serial body or [Collect] predicate changes no structure, so return true from a [Collect] predicate and make the change in its Act"
+                    "only a parallel body records through Commands; a serial body or [Collect] predicate changes structure through a World parameter, and the change applies when the walk closes"
                 );
                 return null;
             }
@@ -277,6 +291,8 @@ static class QueryModelBuilder
                 return Make(ParamKind.Context);
             if (Symbols.Is(type, Symbols.World))
                 return Make(ParamKind.World);
+            if (Symbols.Is(type, Symbols.WorldReader))
+                return Make(ParamKind.Reader);
         }
         var hierarchy =
             Symbols.Is(type, Symbols.ParentTerm) ? ParamKind.Parent

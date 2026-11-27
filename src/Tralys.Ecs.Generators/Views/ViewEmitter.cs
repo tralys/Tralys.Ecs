@@ -109,10 +109,13 @@ static class ViewEmitter
             writer.Line();
             writer.Line($"{model.Name}({Ecs}WorldEntity entity) => __entity = entity;");
             writer.Line();
-            writer.Line($"public {Ecs}WorldEntity Entity => __entity;");
+            writer.Line(
+                $"public readonly {Ecs}WorldEntity Entity {{ {ReadEffect} get => __entity; }}"
+            );
             writer.Line();
-            writer.Line("public bool IsLive => __entity.IsLive;");
+            writer.Line($"public readonly bool IsLive {{ {ReadEffect} get => __entity.IsLive; }}");
             writer.Line();
+            writer.Line(ReadEffect);
             using (
                 writer.Block(
                     $"public static bool TryFrom({Ecs}WorldEntity entity, out {self} view)"
@@ -146,12 +149,14 @@ static class ViewEmitter
         return writer.ToString();
     }
 
-    // Without effects, TECS0045 and TECS0017 cannot see a view's structural writes.
-    const string StructuralEffect =
-        "[global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.Structural | global::Tralys.Ecs.Generated.Effects.MovesRows | global::Tralys.Ecs.Generated.Effects.Mutates)]";
+    // Each must equal the effect of the member the view forwards to.
+    static readonly string ReadEffect = Effects.Declare(Effects.None);
 
-    const string WriteEffect =
-        "[global::Tralys.Ecs.Generated.Effect(global::Tralys.Ecs.Generated.Effects.Mutates)]";
+    static readonly string StructuralEffect = Effects.Declare(
+        Effects.Structural | Effects.MovesEntities | Effects.Mutates
+    );
+
+    static readonly string WriteEffect = Effects.Declare(Effects.Mutates);
 
     const string CallerInfo =
         "[global::System.Runtime.CompilerServices.CallerFilePath] string file = \"\", "
@@ -163,56 +168,59 @@ static class ViewEmitter
         {
             if (!part.Optional)
                 return;
-            writer.Line($"public bool {part.Name} => __entity.Has<{part.Type}>();");
+            writer.Line(
+                $"public readonly bool {part.Name} {{ {ReadEffect} get => __entity.Has<{part.Type}>(); }}"
+            );
             if (part.ReadOnly)
                 return;
             writer.Line();
             writer.Line(StructuralEffect);
             writer.Line(
-                $"public void Add{part.Name}({CallerInfo}) => __entity.Add<{part.Type}>(file: file, line: line);"
+                $"public readonly void Add{part.Name}({CallerInfo}) => __entity.Add<{part.Type}>(file: file, line: line);"
             );
             writer.Line();
             writer.Line(StructuralEffect);
             writer.Line(
-                $"public bool Remove{part.Name}({CallerInfo}) => __entity.Remove<{part.Type}>(file: file, line: line);"
+                $"public readonly bool Remove{part.Name}({CallerInfo}) => __entity.Remove<{part.Type}>(file: file, line: line);"
             );
             return;
         }
 
+        writer.Line(ReadEffect);
         writer.Line(
-            $"public bool TryGet{part.Name}(out {part.Type} value) => __entity.TryGet<{part.Type}>(out value);"
+            $"public readonly bool TryGet{part.Name}(out {part.Type} value) => __entity.TryGet<{part.Type}>(out value);"
         );
         writer.Line();
         if (part.Optional)
         {
             writer.Line(
-                $"public {part.Type}? {part.Name} => TryGet{part.Name}(out var value) ? value : null;"
+                $"public readonly {part.Type}? {part.Name} {{ {ReadEffect} get => TryGet{part.Name}(out var value) ? value : null; }}"
             );
             if (part.ReadOnly)
                 return;
             writer.Line();
             writer.Line(StructuralEffect);
             writer.Line(
-                $"public void SetOrRemove{part.Name}(in {part.Type}? value, {CallerInfo}) => __entity.SetOrRemove(value, file: file, line: line);"
+                $"public readonly void SetOrRemove{part.Name}(in {part.Type}? value, {CallerInfo}) => __entity.SetOrRemove(value, file: file, line: line);"
             );
             return;
         }
         writer.Line(
-            $"public ref readonly {part.Type} {part.Name} => ref __entity.Get<{part.Type}>();"
+            $"public readonly ref readonly {part.Type} {part.Name} {{ {ReadEffect} get => ref __entity.Get<{part.Type}>(); }}"
         );
         if (part.ReadOnly)
             return;
         writer.Line();
         writer.Line(WriteEffect);
         writer.Line(
-            $"public void Replace{part.Name}(in {part.Type} value, {CallerInfo}) => __entity.Replace(value, file: file, line: line);"
+            $"public readonly void Replace{part.Name}(in {part.Type} value, {CallerInfo}) => __entity.Replace(value, file: file, line: line);"
         );
         if (!part.Mutable)
             return;
         writer.Line();
         writer.Line(WriteEffect);
         writer.Line(
-            $"public {Ecs}ComponentEdit<{part.Type}> Edit{part.Name}() => __entity.Edit<{part.Type}>();"
+            $"public readonly {Ecs}ComponentEdit<{part.Type}> Edit{part.Name}() => __entity.Edit<{part.Type}>();"
         );
     }
 }

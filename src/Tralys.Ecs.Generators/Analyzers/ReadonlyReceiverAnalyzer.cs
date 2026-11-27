@@ -5,8 +5,8 @@ using Microsoft.CodeAnalysis.Operations;
 
 namespace Tralys.Ecs.Generators.Analyzers;
 
-/// <summary>A struct member that is not readonly, called through a readonly reference, runs on a hidden copy, so whatever it writes is
-/// lost without a diagnostic from the compiler.</summary>
+/// <summary>A struct method or property setter that is not readonly, called through a readonly reference, runs on a hidden copy, so
+/// whatever it writes is lost without a diagnostic from the compiler. A getter is not checked.</summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ReadonlyReceiverAnalyzer : DiagnosticAnalyzer
 {
@@ -17,15 +17,20 @@ public sealed class ReadonlyReceiverAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterOperationAction(AnalyzeInvocation, OperationKind.Invocation);
-        context.RegisterOperationAction(
-            AnalyzeWrite,
-            OperationKind.SimpleAssignment,
-            OperationKind.CompoundAssignment,
-            OperationKind.CoalesceAssignment,
-            OperationKind.Increment,
-            OperationKind.Decrement
-        );
+        context.RegisterCompilationStartAction(start =>
+        {
+            if (Effects.IsRuntime(start.Compilation))
+                return;
+            start.RegisterOperationAction(AnalyzeInvocation, OperationKind.Invocation);
+            start.RegisterOperationAction(
+                AnalyzeWrite,
+                OperationKind.SimpleAssignment,
+                OperationKind.CompoundAssignment,
+                OperationKind.CoalesceAssignment,
+                OperationKind.Increment,
+                OperationKind.Decrement
+            );
+        });
     }
 
     static void AnalyzeInvocation(OperationAnalysisContext context)

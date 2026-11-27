@@ -30,7 +30,7 @@ public sealed partial class World
             singletonHolders[slot] = entity;
     }
 
-    Entity SingletonRival(Entity claimant, int slot)
+    internal Entity SingletonRival(Entity claimant, int slot)
     {
         var holder = singletonHolders[slot];
         return holder != claimant && allocator.IsCurrent(holder) ? holder : default;
@@ -47,14 +47,6 @@ public sealed partial class World
             singletonHolders[slot] = default;
     }
 
-    Entity SingletonHolder<T>()
-        where T : struct, ISingleton
-    {
-        var slot = layout.SingletonSlot[registry.IndexOf<T>()];
-        var holder = singletonHolders[slot];
-        return allocator.IsCurrent(holder) ? holder : default;
-    }
-
     /// <summary>Some entity holds the singleton <typeparamref name="T"/> present, one pending destroy included; a disabled one reads as
     /// absent, as <see cref="Has{T}"/> does, yet still keeps any other entity from taking <typeparamref name="T"/>.</summary>
     [Effect(Effects.None)]
@@ -66,27 +58,30 @@ public sealed partial class World
     public Entity SingletonEntity<T>()
         where T : struct, ISingleton
     {
-        return SingletonHolder<T>();
+        return SingletonRival(default, layout.SingletonSlot[registry.IndexOf<T>()]);
     }
 
     /// <summary>The singleton by <c>ref readonly</c> from its holder; the ref is valid until the next structural change.</summary>
     /// <exception cref="InvalidOperationException">No entity holds <typeparamref name="T"/>, or its holder has it disabled.</exception>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public ref readonly T GetSingleton<T>()
         where T : struct, ISingleton
     {
-        var holder = SingletonHolder<T>();
+        var holder = SingletonEntity<T>();
         if (holder.IsDefault)
-            throw new InvalidOperationException($"No entity holds the singleton {typeof(T).Name}.");
+            throw NoSingleton<T>();
         return ref Get<T>(holder);
     }
+
+    internal static InvalidOperationException NoSingleton<T>() =>
+        new($"No entity holds the singleton {typeof(T).Name}.");
 
     /// <summary>Copies the singleton out of its holder; false when no entity holds it or its holder has it disabled.</summary>
     [Effect(Effects.None)]
     public bool TryGetSingleton<T>(out T value)
         where T : struct, ISingleton
     {
-        var holder = SingletonHolder<T>();
+        var holder = SingletonEntity<T>();
         if (holder.IsDefault)
         {
             value = default;
@@ -102,16 +97,15 @@ public sealed partial class World
     public ComponentEdit<T> EditSingleton<T>()
         where T : struct, ISingleton, IMutableComponent
     {
-        var holder = SingletonHolder<T>();
+        var holder = SingletonEntity<T>();
         if (holder.IsDefault)
-            throw new InvalidOperationException($"No entity holds the singleton {typeof(T).Name}.");
+            throw NoSingleton<T>();
         return Edit<T>(holder);
     }
 
-    /// <summary>Sets a singleton on its current holder, enabling a disabled one, or on the world-owned singleton entity.</summary>
-    /// <exception cref="InvalidOperationException">A serial query body is running and the set would create the owner, or add or enable
-    /// the singleton.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <summary>Sets a singleton on its current holder, enabling a disabled one, or on the world-owned singleton entity; creating the owner,
+    /// or an add or enable, waits where <see cref="Set{T}"/>'s would.</summary>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void SetSingleton<T>(
         in T value,
         [CallerFilePath] string file = "",
@@ -120,10 +114,10 @@ public sealed partial class World
         where T : struct, ISingleton
     {
         At(file, line);
-        var holder = SingletonHolder<T>();
+        var holder = SingletonEntity<T>();
         if (holder.IsDefault)
         {
-            if (!allocator.IsCurrent(singletonOwner))
+            if (!IsLive(singletonOwner))
             {
                 CheckWritable();
                 singletonOwner = NewEntity();

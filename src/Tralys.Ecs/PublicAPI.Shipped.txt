@@ -140,7 +140,6 @@ Tralys.Ecs.ChangeSet<TBits>.MarksOf(Tralys.Ecs.Entity entity) -> TBits
 Tralys.Ecs.ChangeSet<TBits>.Unmark(Tralys.Ecs.Entity entity, TBits bits) -> void
 Tralys.Ecs.ChangeTracking
 Tralys.Ecs.ChangeTracking.AddedVersionOf<T>(Tralys.Ecs.Entity entity) -> ulong
-Tralys.Ecs.ChangeTracking.Commit(Tralys.Ecs.CursorId cursor, ulong upTo) -> void
 Tralys.Ecs.ChangeTracking.DescendantVersionOf(Tralys.Ecs.Entity root) -> ulong
 Tralys.Ecs.ChangeTracking.NameOf(Tralys.Ecs.CursorId cursor) -> string!
 Tralys.Ecs.ChangeTracking.Register(string! name, in Tralys.Ecs.CursorOptions options = default(Tralys.Ecs.CursorOptions)) -> Tralys.Ecs.CursorId
@@ -185,10 +184,8 @@ Tralys.Ecs.ChangedValues<T>.Enumerator.MoveNext() -> bool
 Tralys.Ecs.ChangedValues<T>.GetEnumerator() -> Tralys.Ecs.ChangedValues<T>.Enumerator
 Tralys.Ecs.ChunkContext
 Tralys.Ecs.ChunkContext.ChunkContext() -> void
-Tralys.Ecs.ChunkContext.ChunkContext(Tralys.Ecs.World! world, int chunkIndex, int worker) -> void
 Tralys.Ecs.ChunkContext.ChunkIndex.get -> int
 Tralys.Ecs.ChunkContext.Worker.get -> int
-Tralys.Ecs.ChunkContext.World.get -> Tralys.Ecs.World!
 Tralys.Ecs.ChunkView
 Tralys.Ecs.ChunkView.ChunkIndexInQuery.get -> int
 Tralys.Ecs.ChunkView.ChunkView() -> void
@@ -203,7 +200,6 @@ Tralys.Ecs.ChunkView.Rows.get -> Tralys.Ecs.RowSet
 Tralys.Ecs.ChunkView.Sparse<T>() -> Tralys.Ecs.SparseTerm<T>
 Tralys.Ecs.ChunkView.Stop() -> void
 Tralys.Ecs.ChunkView.Worker.get -> int
-Tralys.Ecs.ChunkView.World.get -> Tralys.Ecs.World!
 Tralys.Ecs.ChunkView.Write<T>() -> Tralys.Ecs.TrackedSpan<T>
 Tralys.Ecs.ChunkView.WriteUntracked<T>() -> System.Span<T>
 Tralys.Ecs.CollectAttribute
@@ -284,7 +280,6 @@ Tralys.Ecs.ComponentInstanceAttribute<T>.SchemaVersion.get -> int
 Tralys.Ecs.ComponentInstanceAttribute<T>.SchemaVersion.set -> void
 Tralys.Ecs.ComponentModule
 Tralys.Ecs.ComponentModule.Assembly.get -> string!
-Tralys.Ecs.ComponentModule.ComponentModule(string! assembly, Tralys.Ecs.ComponentDescriptor![]! descriptors) -> void
 Tralys.Ecs.ComponentModule.Descriptors.get -> System.Collections.Generic.IReadOnlyList<Tralys.Ecs.ComponentDescriptor!>!
 Tralys.Ecs.ComponentTraits
 Tralys.Ecs.ComponentTraits.Enableable = 2 -> Tralys.Ecs.ComponentTraits
@@ -493,8 +488,6 @@ Tralys.Ecs.Generated.EffectAttribute
 Tralys.Ecs.Generated.EffectAttribute.EffectAttribute(Tralys.Ecs.Generated.Effects effects) -> void
 Tralys.Ecs.Generated.EffectAttribute.Effects.get -> Tralys.Ecs.Generated.Effects
 Tralys.Ecs.Generated.Effects
-Tralys.Ecs.Generated.Effects.Borrows = 64 -> Tralys.Ecs.Generated.Effects
-Tralys.Ecs.Generated.Effects.MovesRows = 8 -> Tralys.Ecs.Generated.Effects
 Tralys.Ecs.Generated.Effects.Mutates = 16 -> Tralys.Ecs.Generated.Effects
 Tralys.Ecs.Generated.Effects.None = 0 -> Tralys.Ecs.Generated.Effects
 Tralys.Ecs.Generated.Effects.OwnerThread = 128 -> Tralys.Ecs.Generated.Effects
@@ -522,7 +515,6 @@ Tralys.Ecs.Generated.RowStoreFactory.RowStoreFactory() -> void
 Tralys.Ecs.Generated.UpCache<T>
 Tralys.Ecs.Generated.UpCache<T>.Find(Tralys.Ecs.Entity entity) -> Tralys.Ecs.Up<T>
 Tralys.Ecs.Generated.UpCache<T>.UpCache() -> void
-Tralys.Ecs.Generated.UpCache<T>.UpCache(Tralys.Ecs.World! world) -> void
 Tralys.Ecs.HierarchyEvent
 Tralys.Ecs.HierarchyEvent.ChildAdded = 0 -> Tralys.Ecs.HierarchyEvent
 Tralys.Ecs.HierarchyEvent.ChildMoved = 2 -> Tralys.Ecs.HierarchyEvent
@@ -972,8 +964,6 @@ Tralys.Ecs.StorageAttribute.StorageAttribute(Tralys.Ecs.StorageKind kind) -> voi
 Tralys.Ecs.StorageKind
 Tralys.Ecs.StorageKind.Archetype = 0 -> Tralys.Ecs.StorageKind
 Tralys.Ecs.StorageKind.Sparse = 1 -> Tralys.Ecs.StorageKind
-Tralys.Ecs.StructuralAttribute
-Tralys.Ecs.StructuralAttribute.StructuralAttribute() -> void
 Tralys.Ecs.SystemAttribute
 Tralys.Ecs.SystemAttribute.SystemAttribute() -> void
 Tralys.Ecs.SystemBase
@@ -1337,7 +1327,6 @@ static Tralys.Ecs.Generated.Plumbing.MultiIndexOf<TComponent, TKey>(Tralys.Ecs.W
 static Tralys.Ecs.Generated.Plumbing.Optional<T>(ref readonly T value) -> Tralys.Ecs.Optional<T>
 static Tralys.Ecs.Generated.Plumbing.OptionalRef<T>(ref T value) -> Tralys.Ecs.OptionalRef<T>
 static Tralys.Ecs.Generated.Plumbing.OrderedIndexOf<TComponent, TKey>(Tralys.Ecs.World! world, int ordinal) -> Tralys.Ecs.OrderedIndex<TKey>
-static Tralys.Ecs.Generated.Plumbing.ParentTerm<T>(Tralys.Ecs.World! world, Tralys.Ecs.Entity entity) -> Tralys.Ecs.Parent<T>
 static Tralys.Ecs.Generated.Plumbing.Release<T>(in Tralys.Ecs.SparseTerm<T> term, int slot, in T before) -> void
 static Tralys.Ecs.Generated.Plumbing.RowMask(in Tralys.Ecs.ChunkView chunk) -> ulong
 static Tralys.Ecs.Generated.Plumbing.Rows<TKey, TRow>(Tralys.Ecs.Commands commands, Tralys.Ecs.Entity entity) -> Tralys.Ecs.CommandRows<TKey, TRow>

@@ -9,16 +9,28 @@ public sealed partial class World
 
     /// <summary>Hands the world to the calling thread; with <see cref="WorldOptions.CheckThread"/>, writes from any other thread
     /// throw.</summary>
-    [Effect(Effects.None)]
-    public void BindToCurrentThread() => ownerThread = Environment.CurrentManagedThreadId;
+    /// <exception cref="InvalidOperationException">A partitioned query is running.</exception>
+    [Effect(Effects.Mutates)]
+    public void BindToCurrentThread()
+    {
+        CheckSerial();
+        ownerThread = Environment.CurrentManagedThreadId;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void CheckWritable()
     {
-        if (parallelDepth != 0)
-            ThrowParallel();
+        CheckSerial();
         if (checkThread)
             CheckOwner();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [Effect(Effects.Mutates)]
+    void CheckSerial()
+    {
+        if (parallelDepth != 0)
+            ThrowParallel();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

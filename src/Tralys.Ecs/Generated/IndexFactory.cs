@@ -3,6 +3,7 @@ namespace Tralys.Ecs.Generated;
 /// <summary>Creates a world's store for one index declaration; emitted by the generator because it needs the key type.</summary>
 public readonly unsafe struct IndexFactory
 {
+    [Effect(Effects.None)]
     readonly delegate* <World, int, IndexDeclaration, IndexStore> create;
 
     IndexFactory(delegate* <World, int, IndexDeclaration, IndexStore> create) =>

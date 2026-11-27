@@ -108,15 +108,14 @@ A handle is usable while `IsLive`: it exists, and neither it nor an ancestor is 
 
 - **Outside a walk:** writes apply at once.
 - **Serial `[Query]` body or `[Collect]` predicate:**
-  - Writes values at once; makes no structural change.
-  - A structural change goes in the `[Collect]` act, which runs after the walk closes.
-  - TECS0045 rejects a structural change at compile time; at run time it throws.
+  - Writes values at once.
+  - A structural change records, and applies when the walk closes, before `RunX` returns; nothing moves while the walk is open.
 - **Parallel body:**
   - Writes its own `ref` columns.
+  - Reads through a `WorldReader` parameter; it can't take a `World` or `WorldEntity` (TECS0015).
   - Records structural changes through a `Commands` parameter, applied at the next playback.
-  - Can't touch the world API (TECS0017).
 - **Destroy:** `Destroy` marks the entity pending. It stays readable until a finalising playback, and an observer can
-  still rescue it.
+  still rescue it before finalisation.
 - **Readonly references:** a non-`readonly` struct method called through a `ref readonly` runs on a copy, so
   TECS0046 rejects the call.
 

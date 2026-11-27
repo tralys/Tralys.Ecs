@@ -13,6 +13,7 @@ enum ParamKind
     Commands,
     Context,
     World,
+    Reader,
     Arg,
     Accumulator,
     Parent,

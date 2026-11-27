@@ -53,7 +53,7 @@ public sealed partial class RefWriteReindexTests
 
         using (var edit = world.Edit<Badge>(entity))
         {
-            world.Set(entity, new Badge { Number = 5 });
+            world.Replace(entity, new Badge { Number = 5 });
             edit.Value.Number = 1;
         }
         world.BadgeByNumber().TryGet(1, out var holder);

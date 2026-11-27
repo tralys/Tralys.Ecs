@@ -4,9 +4,11 @@ namespace Tralys.Ecs;
 public interface IBundle
 {
     /// <summary>Adds the type of each of the bundle's fields to <paramref name="shape"/>.</summary>
+    [Effect(Effects.None)]
     static abstract void Describe(ref BundleShape shape);
 
     /// <summary>Hands each non-tag field's value to <paramref name="writer"/>.</summary>
+    [Effect(Effects.None)]
     void Write(ref BundleWriter writer);
 }
 

@@ -19,10 +19,12 @@ public readonly ref struct OrderedIndex<TKey>
     /// <summary>Every entity whose key is at most <paramref name="upToInclusive"/>, in key order. Each <c>foreach</c> walks a snapshot, so
     /// the body may change values, add and destroy; an entity is skipped once it leaves the index or its key rises past the bound. The
     /// snapshot lives in world scratch, so a partitioned query body cannot take one.</summary>
+    [Effect(Effects.None)]
     public DueEntities<TKey> Due(scoped in TKey upToInclusive) =>
         new(store, upToInclusive, includeDetached);
 
     /// <summary>The entry with the smallest key.</summary>
+    [Effect(Effects.None)]
     public bool TryPeek([MaybeNullWhen(false)] out TKey key, out Entity entity)
     {
         if (store is not null)
@@ -36,6 +38,7 @@ public readonly ref struct OrderedIndex<TKey>
     public int Count => store?.Count(includeDetached) ?? 0;
 
     /// <summary>The same index, also listing detached entities.</summary>
+    [Effect(Effects.None)]
     public OrderedIndex<TKey> IncludeDetached() => new(store, true);
 }
 
@@ -56,6 +59,7 @@ public readonly ref struct DueEntities<TKey>
 
     /// <summary>Snapshots the due entities from world scratch and walks them in key order.</summary>
     /// <exception cref="InvalidOperationException">A partitioned query body is running.</exception>
+    [Effect(Effects.OwnerThread)]
     public DueEnumerator<TKey> GetEnumerator() => new(store, upTo, includeDetached);
 }
 
@@ -83,6 +87,7 @@ public ref struct DueEnumerator<TKey>
     public readonly Entity Current => snapshot.Span[at];
 
     /// <summary>Advances to the next snapshot entry still in the index with its key within the bound; false when none is left.</summary>
+    [Effect(Effects.None)]
     public bool MoveNext()
     {
         if (store is null)
@@ -97,6 +102,7 @@ public ref struct DueEnumerator<TKey>
     }
 
     /// <summary>Returns the snapshot to world scratch.</summary>
+    [Effect(Effects.None)]
     public void Dispose() => snapshot.Dispose();
 }
 

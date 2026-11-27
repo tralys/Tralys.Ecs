@@ -14,7 +14,17 @@ public sealed partial class World
     /// <exception cref="ArgumentException">The image comes from a world with another registry.</exception>
     /// <exception cref="InvalidOperationException">Under <see cref="UnresolvedPolicy.Fail"/>, an external reference did not resolve, or a
     /// restored singleton is already held; the world is left unchanged, as it is when the rebaser throws.</exception>
-    [Effect(Effects.Settled | Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <exception cref="TargetPolicyException">A restored <see cref="TargetPolicy.Throw"/> edge would leave a live source pointing at a dying
+    /// target, such as an external one pending destroy or a restored one under a dying external parent; the world is left
+    /// unchanged.</exception>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.Settled
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     public RestoreResult Restore(
         CaptureImage image,
         in RestoreOptions options = default,
@@ -41,6 +51,7 @@ public sealed partial class World
         {
             conflict = EndIndexBatch();
         }
+        VerifyInvariants();
         foreach (var attachment in attachmentOrder)
             attachment.OnWorldRestored(
                 this,
@@ -73,6 +84,7 @@ internal sealed class Restorer
     public readonly LifecycleReason Reason;
     public readonly List<DeferredRef> Deferred = [];
     public int Unresolved;
+    readonly Queue<ulong> buffers = new();
 
     // Everything that can throw runs here, before the world changes.
     public Restorer(World world, CaptureImage image, in RestoreOptions options)
@@ -98,6 +110,7 @@ internal sealed class Restorer
                 );
         }
         CheckSingletons();
+        CheckTargets();
         pageColumns = new Array[image.Pages.Length][];
         for (var p = 0; p < pageColumns.Length; p++)
         {
@@ -147,10 +160,80 @@ internal sealed class Restorer
             CheckSingleton(record.Type);
     }
 
+    bool Lost(Entity encoded) =>
+        !encoded.IsDefault
+        && !ImageRef.TryLocal(encoded, out _)
+        && resolved[ImageRef.ExternalIndex(encoded)].IsDefault;
+
+    void CheckTargets()
+    {
+        var parents = new Entity[Created.Length];
+        foreach (var link in image.Parents)
+            parents[link.Child] = link.Parent;
+        var dying = new sbyte[Created.Length];
+        var path = new List<int>();
+        foreach (var record in image.Relations)
+        {
+            if (registry[record.Type].OnTargetDestroyed != TargetPolicy.Throw)
+                continue;
+            for (var k = 0; k < record.Sources.Length; k++)
+            {
+                var target = record.Targets[k];
+                if (target.IsDefault || Lost(target))
+                    continue;
+                var local = ImageRef.TryLocal(target, out var at);
+                var resolvedTarget = local
+                    ? image.Sources[at]
+                    : resolved[ImageRef.ExternalIndex(target)];
+                if (
+                    world.Unrelatable(
+                        record.Type,
+                        image.Sources[record.Sources[k]],
+                        !Dying(record.Sources[k]),
+                        resolvedTarget,
+                        local ? !Dying(at) : world.IsLive(resolvedTarget)
+                    ) is
+                    { } error
+                )
+                    throw error;
+            }
+        }
+
+        bool Dying(int local)
+        {
+            path.Clear();
+            bool doomed;
+            for (var at = local; ; )
+            {
+                if (dying[at] != 0)
+                {
+                    doomed = dying[at] > 0;
+                    break;
+                }
+                dying[at] = -1;
+                path.Add(at);
+                var parent = parents[at];
+                if (parent.IsDefault || Lost(parent))
+                {
+                    doomed = false;
+                    break;
+                }
+                if (!ImageRef.TryLocal(parent, out at))
+                {
+                    doomed = !world.IsLive(resolved[ImageRef.ExternalIndex(parent)]);
+                    break;
+                }
+            }
+            foreach (var visited in path)
+                dying[visited] = (sbyte)(doomed ? 1 : -1);
+            return doomed;
+        }
+    }
+
     void CheckSingleton(int type)
     {
         var slot = world.layout.SingletonSlot[type];
-        if (slot >= 0 && world.allocator.IsCurrent(world.singletonHolders[slot]))
+        if (slot >= 0 && !world.SingletonRival(default, slot).IsDefault)
             throw new InvalidOperationException(
                 $"{registry[type].Name} is a singleton this world already holds; nothing was restored."
             );
@@ -158,6 +241,7 @@ internal sealed class Restorer
 
     public void Run()
     {
+        AllocateBuffers();
         for (var local = 0; local < Created.Length; local++)
             Created[local] = world.allocator.Allocate(LifecycleState.Alive);
         for (var p = 0; p < image.Pages.Length; p++)
@@ -171,7 +255,7 @@ internal sealed class Restorer
             var child = Created[link.Child];
             var parent = Decode(link.Parent, child, -1, -1, -1);
             if (!parent.IsDefault)
-                world.Reparent(child, parent, -1, Reason, guardTargets: false);
+                world.Reparent(child, parent, -1, Reason);
         }
         if (world.partitionsUsed)
         {
@@ -207,7 +291,6 @@ internal sealed class Restorer
             if (page.Detached)
             {
                 slot.DetachedSelf = page.DetachedSelf[r];
-                world.partitionsUsed = true;
                 world.changes.Append(LogKind.Detached, entity, -1, Reason);
             }
             var row = slot.Row;
@@ -263,7 +346,7 @@ internal sealed class Restorer
     {
         var storage = world.SparseFor(record.Type);
         var size = registry[record.Type].Column.Size;
-        var tracked = world.Tracking && registry[record.Type].IsStamped;
+        var tracked = world.Tracking && storage.Stamped;
         for (var k = 0; k < record.Locals.Length; k++)
         {
             var entity = Created[record.Locals[k]];
@@ -272,7 +355,7 @@ internal sealed class Restorer
             world.allocator.Slots[entity.Index].SparseCount++;
             world.ClaimSingleton(entity, record.Type);
             if (tracked)
-                storage.StampAdded(at, world.version);
+                world.Stamp(added: true, storage, at);
             world.Report(
                 ComponentChange.Added,
                 entity,
@@ -340,6 +423,75 @@ internal sealed class Restorer
         }
     }
 
+    // In the order the values are patched in, so nothing past this point allocates.
+    void AllocateBuffers()
+    {
+        for (var p = 0; p < image.Pages.Length; p++)
+        {
+            var page = image.Pages[p];
+            for (var r = 0; r < page.Locals.Length; r++)
+            {
+                for (var c = 0; c < page.ColumnTypes.Length; c++)
+                    Allocate(page.ColumnTypes[c], pageColumns[p][c], r);
+            }
+        }
+        for (var i = 0; i < image.Sparse.Length; i++)
+        {
+            for (var k = 0; k < image.Sparse[i].Locals.Length; k++)
+                Allocate(image.Sparse[i].Type, sparseValues[i], k);
+        }
+        for (var i = 0; i < image.Relations.Length; i++)
+        {
+            var record = image.Relations[i];
+            for (var k = 0; k < record.Sources.Length; k++)
+            {
+                if (!record.Targets[k].IsDefault && !Lost(record.Targets[k]))
+                    Allocate(record.Type, payloads[i], k);
+            }
+        }
+        for (var i = 0; i < image.Rows.Length; i++)
+        {
+            var record = image.Rows[i];
+            for (var k = 0; k < record.Owners.Length; k++)
+            {
+                if (Keyed(record.Type, rowValues[i], k))
+                    Allocate(record.Type, rowValues[i], k);
+            }
+        }
+    }
+
+    bool Keyed(int type, Array values, int row)
+    {
+        var plan = CapturePlan.For(registry[type]);
+        ref var value = ref RowBytes.At(values, row, registry[type].Column.Size);
+        foreach (var offset in plan.KeyRefs)
+        {
+            if (Lost(ImageRef.At(ref value, offset)))
+                return false;
+        }
+        return true;
+    }
+
+    void Allocate(int type, Array values, int row)
+    {
+        var descriptor = registry[type];
+        var plan = CapturePlan.For(descriptor);
+        if (plan.PassesThrough)
+            return;
+        ref var value = ref RowBytes.At(values, row, descriptor.Column.Size);
+        for (var i = 0; i < plan.Buffers.Length; i++)
+        {
+            var buffer = ImageRef.BufferAt(ref value, plan.Buffers[i]);
+            if (buffer < 0)
+                continue;
+            ulong handle = 0;
+            descriptor
+                .BufferOps[plan.BufferOps[i]]
+                .Allocate(world, image.Buffers[buffer], ref Unsafe.As<ulong, byte>(ref handle));
+            buffers.Enqueue(handle);
+        }
+    }
+
     static void Stage(ColumnOps ops, Array from, int index, Array into)
     {
         if (ops.Managed)
@@ -379,9 +531,7 @@ internal sealed class Restorer
                 ImageRef.ClearBuffer(ref value, offset);
                 continue;
             }
-            descriptor
-                .BufferOps[plan.BufferOps[i]]
-                .Allocate(world, image.Buffers[buffer], ref Unsafe.Add(ref value, offset));
+            Unsafe.WriteUnaligned(ref Unsafe.Add(ref value, offset), buffers.Dequeue());
             if (!plan.EntityBuffers[i])
                 continue;
             var held = ImageRef.Entities(world, ref value, offset);

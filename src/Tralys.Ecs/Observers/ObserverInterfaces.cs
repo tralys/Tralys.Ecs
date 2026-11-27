@@ -5,6 +5,13 @@ public interface IAddObserver<T>
 {
     /// <summary>Called at playback for an add, with the value then. A playback reports each component's net change over the batch, so an
     /// add the batch also undid is not heard.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnAdd(in ObserverContext context, Entity entity, in T value);
 }
 
@@ -14,6 +21,13 @@ public interface IRemoveObserver<T>
 {
     /// <summary>Called at playback for a removal, with the value observers last heard. A playback reports each component's net change over
     /// the batch, so a removal the batch also undid is not heard; one re-added in the same batch is heard as a removal then an add.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnRemove(in ObserverContext context, Entity entity, in T oldValue);
 }
 
@@ -22,13 +36,30 @@ public interface IReplaceObserver<T>
     where T : struct, IReplaceOnly
 {
     /// <summary>Called at playback for an overwrite whose bytes differ, with both values as they were then.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnReplace(in ObserverContext context, Entity entity, in T oldValue, in T newValue);
 }
 
 /// <summary>Runs before the entity's row is released, so every component is still readable.</summary>
 public interface IDestroyObserver
 {
-    /// <summary>Called for each entity of a finalising batch, cascades included, before any is released, and for entities leaving through <see cref="World.Extract"/>; <see cref="World.CancelDestroy"/> spares it, and a throw leaves the batch pending.</summary>
+    /// <summary>Called for each entity of a finalising batch, cascades included, before any is released, and for entities leaving through
+    /// <see cref="World.Extract"/>. A finalising batch is fixed by then: a structural write records and applies after the release, so
+    /// <see cref="World.CancelDestroy"/> cannot spare it. A throw stops nothing and is reported once the playback or extract has
+    /// finished.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnDestroy(in ObserverContext context, Entity entity);
 }
 
@@ -36,12 +67,33 @@ public interface IDestroyObserver
 public interface IRelationObserver<R>
 {
     /// <summary>An edge was added; a symmetric relation reports its mirror edge as a second call.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnRelated(in ObserverContext context, Entity source, Entity target, in R payload);
 
     /// <summary>An edge was removed; <paramref name="payload"/> is the payload it had.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnUnrelated(in ObserverContext context, Entity source, Entity target, in R payload);
 
     /// <summary>An existing edge was related again with a payload whose bytes differ from the stored one.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnRelationChanged(
         in ObserverContext context,
         Entity source,
@@ -56,6 +108,13 @@ public interface ILifecycleObserver
 {
     /// <summary>The entity was detached, reattached or restored: <paramref name="kind"/> is <see cref="LogKind.Detached"/>,
     /// <see cref="LogKind.Reattached"/> or <see cref="LogKind.Restored"/>.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnLifecycle(in ObserverContext context, Entity entity, LogKind kind);
 }
 
@@ -76,5 +135,12 @@ public enum HierarchyEvent : byte
 public interface IHierarchyObserver
 {
     /// <summary>Called at playback; <paramref name="parent"/> is the parent the event is about, the one left for <see cref="HierarchyEvent.ChildRemoved"/>.</summary>
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     void OnHierarchy(in ObserverContext context, Entity child, Entity parent, HierarchyEvent kind);
 }

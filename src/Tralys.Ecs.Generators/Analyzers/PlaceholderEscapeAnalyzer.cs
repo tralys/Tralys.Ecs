@@ -17,7 +17,11 @@ public sealed class PlaceholderEscapeAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterOperationAction(Analyze, OperationKind.Invocation);
+        context.RegisterCompilationStartAction(start =>
+        {
+            if (!Effects.IsRuntime(start.Compilation))
+                start.RegisterOperationAction(Analyze, OperationKind.Invocation);
+        });
     }
 
     static void Analyze(OperationAnalysisContext context)
@@ -80,6 +84,13 @@ public sealed class PlaceholderEscapeAnalyzer : DiagnosticAnalyzer
         consumer switch
         {
             IReturnOperation => "returned from the method",
+            ISimpleAssignmentOperation { Target: var target }
+                when Unwrap(target)
+                    is IParameterReferenceOperation
+                    {
+                        Parameter: { RefKind: RefKind.Out or RefKind.Ref } parameter,
+                    } =>
+                $"returned through the {(parameter.RefKind == RefKind.Out ? "out" : "ref")} parameter '{parameter.Name}'",
             ISimpleAssignmentOperation
             {
                 Target: var target,

@@ -45,6 +45,7 @@ public sealed class ChangeTracking
     LogKinds wantedEntity;
     LogKinds wantedAny;
     internal long structuralChanges;
+    internal ulong Epoch { get; private set; }
 
     internal ChangeTracking(World world, int queueCap, AttributedLog? attributed)
     {
@@ -116,18 +117,19 @@ public sealed class ChangeTracking
         ref var c = ref Get(cursor);
         var until = world.version;
         world.version++;
-        return new ChangeSample(world, c.Since, until, c.Options);
+        return new ChangeSample(world, c.Since, until, c.Options, Epoch);
     }
 
-    /// <summary>Marks everything up to <paramref name="upTo"/> consumed.</summary>
+    /// <summary>Marks the sample <paramref name="window"/> came from consumed, so the cursor's next sample starts after it. A window
+    /// sampled before the world was last reset or cleared is ignored, since the cursor started over then.</summary>
     /// <exception cref="ArgumentException">The cursor is not registered.</exception>
     [Effect(Effects.Mutates)]
-    public void Commit(CursorId cursor, ulong upTo)
+    public void Commit(CursorId cursor, ChangeWindow window)
     {
         world.CheckWritable();
         ref var c = ref Get(cursor);
-        if (upTo > c.Since)
-            c.Since = upTo;
+        if (window.Epoch == Epoch && window.Until > c.Since)
+            c.Since = window.Until;
     }
 
     /// <summary>The name the cursor was registered with.</summary>
@@ -157,8 +159,8 @@ public sealed class ChangeTracking
             ? block.Changed[at]
             : 0;
 
-    /// <summary>The newest version at which anything below <paramref name="root"/> changed: a write to a <see cref="PropagateChangesAttribute"/>
-    /// component, a child gained, lost or reordered, a descendant marked or spared pending destroy, detached or reattached, or an inherited
+    /// <summary>The newest version at which anything below <paramref name="root"/> changed: a write to or removal of a
+    /// <see cref="PropagateChangesAttribute"/> component, a child gained, lost or reordered, a descendant marked or spared pending destroy, detached or reattached, or an inherited
     /// tag (<see cref="TagAttribute.Inherited"/>) added, removed, enabled or disabled on an ancestor so that it takes or loses effect on a
     /// descendant, each as it applies. A descendant's own write of that tag counts only when the tag is declared
     /// <see cref="PropagateChangesAttribute"/>.</summary>
@@ -169,7 +171,7 @@ public sealed class ChangeTracking
         return Unsafe.IsNullRef(ref node) ? 0 : Volatile.Read(ref node.DescendantVersion);
     }
 
-    /// <summary>The newest version written to a <see cref="PropagateChangesAttribute"/> component on any target of
+    /// <summary>The newest version written to or removed from a <see cref="PropagateChangesAttribute"/> component on any target of
     /// <paramref name="source"/>, over every relation, or at which its <typeparamref name="R"/> edges last changed.</summary>
     [Effect(Effects.None)]
     public ulong RelatedVersionOf<R>(Entity source)
@@ -275,6 +277,8 @@ public sealed class ChangeTracking
         }
         throw new ArgumentException($"{cursor} is not registered.", nameof(cursor));
     }
+
+    internal void BeginEpoch() => Epoch++;
 
     internal void Expire()
     {

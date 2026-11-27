@@ -28,4 +28,33 @@ public sealed partial class CompareOnReleaseTests
             changed.Add(row.Entity);
         await Assert.That(changed).IsEquivalentTo([entities[42]]);
     }
+
+    struct EditUntracked(World world) : IChunkKernel
+    {
+        public void Execute(ref ChunkView chunk)
+        {
+            var health = chunk.Write<Health>();
+            foreach (var row in chunk.Rows)
+            {
+                using var untracked = world.Untracked();
+                using var edit = health.Edit(row);
+                edit.Value.Value++;
+            }
+        }
+    }
+
+    [Test]
+    public async Task A_column_edit_released_inside_an_untracked_scope_stamps_nothing()
+    {
+        using var world = TestWorlds.Create();
+        var entity = world.Create();
+        world.Set(entity, new Health { Value = 1 });
+        var before = world.Changes.VersionOf<Health>(entity);
+        world.AdvanceVersion();
+        var kernel = new EditUntracked(world);
+
+        world.Query(QueryDesc.Builder().Write<Health>().Build()).Run(ref kernel);
+
+        await Assert.That(world.Changes.VersionOf<Health>(entity)).IsEqualTo(before);
+    }
 }

@@ -36,5 +36,11 @@ public interface IRow : IDeclared;
 public interface IRow<TKey> : IRow
 {
     /// <summary>The <see cref="RowKeyAttribute"/> field.</summary>
-    TKey RowKey { get; set; }
+    TKey RowKey
+    {
+        [Effect(Effects.None)]
+        get;
+        [Effect(Effects.None)]
+        set;
+    }
 }

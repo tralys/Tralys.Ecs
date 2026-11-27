@@ -14,7 +14,11 @@ public interface IChunkExecutor
 {
     /// <summary>Worker indexes passed to <see cref="IPartitionJob.Execute"/> are in <c>[0, WorkerCount)</c>; a run allocates one
     /// buffer per worker.</summary>
-    int WorkerCount { get; }
+    int WorkerCount
+    {
+        [Effect(Effects.None)]
+        get;
+    }
 
     /// <summary>Executes every item in <c>[0, itemCount)</c> exactly once and returns after all have finished. When an item throws, items
     /// not yet started are skipped and that exception is rethrown once the started ones have finished.</summary>

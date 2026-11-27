@@ -21,7 +21,7 @@ internal struct ValueLocation
     public int Tracked;
     public SparseStorage? Sparse;
     public bool Disabled;
-    public bool Pending;
+    public bool FlipRecorded;
 
     public readonly bool IsTracked =>
         (Kind == LocationKind.Column && Tracked >= 0)
@@ -32,41 +32,22 @@ public sealed partial class World
 {
     internal readonly CommandBuffer stage;
     internal readonly PendingOverlay overlay;
-    internal int iterationDepth;
-
-    // Serial walks only; iterationDepth also counts observer delivery.
-    internal int walkDepth;
     internal readonly ChangeTracking changes;
     internal readonly ObserverRegistry observers;
-    internal readonly List<ICoreHook> coreHooks = [];
 
     /// <summary>Per-consumer change cursors over this world's row stamps, and watches over its structural changes.</summary>
     public ChangeTracking Changes => changes;
 
+    /// <summary>This world's read-only view, as a query body's <see cref="WorldReader"/> parameter sees it.</summary>
+    public WorldReader Reader => new(this);
+
     /// <summary>This world's lifecycle observers; every event reaches them at the next playback point, in operation order.</summary>
     public ObserverRegistry Observers => observers;
 
+    // Empty on purpose: a member that calls it is marked as changing structure.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    bool Defers(in EntitySlot slot) =>
-        iterationDepth > 0 || slot.Pending || slot.State == LifecycleState.Reserved;
-
-    // Not iterationDepth: a destroy observer must rescue an entity at once while it finalises.
-    bool DefersLifecycle(in EntitySlot slot) =>
-        slot.State == LifecycleState.Reserved || (slot.Pending && !playing);
-
-    // Not iterationDepth: observers still record structural changes, and a destroy observer rescues at once.
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    void CheckStructural()
-    {
-        if (walkDepth != 0)
-            ThrowStructuralInWalk();
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    static void ThrowStructuralInWalk() =>
-        throw new InvalidOperationException(
-            "A serial query body or [Collect] predicate cannot change structure (add, remove, enable, disable, create, destroy, detach, reparent); return true from a [Collect] predicate and make the change in its Act, which runs once the walk has closed."
-        );
+    [Effect(Effects.Structural)]
+    static void Structural() { }
 
     /// <summary>The entity has <typeparamref name="T"/>, counting pending changes; a disabled <see cref="EnableableAttribute"/> one reads
     /// as absent, as in queries. False when the entity does not exist.</summary>
@@ -121,7 +102,7 @@ public sealed partial class World
     /// <summary>The component by <c>ref readonly</c>, pending adds included; the ref is valid until the next structural change.</summary>
     /// <exception cref="InvalidOperationException">The entity lacks <typeparamref name="T"/>, holds it disabled, or does not
     /// exist.</exception>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public ref readonly T Get<T>(Entity entity)
         where T : struct, IComponent
     {
@@ -163,11 +144,22 @@ public sealed partial class World
 
     /// <summary>The component by <c>ref readonly</c>, or an empty optional when the entity lacks it, holds it disabled, or does not
     /// exist.</summary>
-    [Effect(Effects.Borrows)]
+    [Effect(Effects.None)]
     public Optional<T> Find<T>(Entity entity)
         where T : struct, IComponent
     {
-        return new Optional<T>(ref Read<T>(entity));
+        if (!checkBorrows)
+            return new Optional<T>(ref Read<T>(entity));
+        var type = registry.IndexOf<T>();
+        ref var value = ref Locate<T>(entity, type, out var location);
+        IMoveCount? storage = location.Kind switch
+        {
+            LocationKind.Column => this,
+            LocationKind.Sparse => location.Sparse,
+            LocationKind.Overlay => stage.Payloads<T>(type),
+            _ => null,
+        };
+        return new Optional<T>(ref value, BorrowCheck.Of(storage));
     }
 
     /// <summary>A scoped write of the present component: the row is stamped on dispose only if its value changed.</summary>
@@ -198,7 +190,7 @@ public sealed partial class World
 
     /// <summary>An edit of the component, which is first set to <paramref name="initial"/>, and so enabled, when the entity lacks it or
     /// holds it disabled.</summary>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public ComponentEdit<T> EditOrAdd<T>(
         Entity entity,
         in T initial = default,
@@ -212,9 +204,9 @@ public sealed partial class World
         return Edit<T>(entity);
     }
 
-    /// <summary>Adds or overwrites, enabling a disabled one. An overwrite stamps only if the value differs; an add or enable throws inside
-    /// a serial query body, and inside an observer waits for the next playback while reads see it at once.</summary>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <summary>Adds or overwrites, enabling a disabled one; an overwrite stamps only if the value differs. An add or enable waits inside a
+    /// query walk, until the walk closes, and inside an observer, until the next playback; reads see it at once.</summary>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Set<T>(
         Entity entity,
         in T value,
@@ -229,12 +221,12 @@ public sealed partial class World
     }
 
     /// <summary>Adds or overwrites the component <paramref name="type"/> from <paramref name="value"/>, its bytes in the component's
-    /// layout, as <see cref="Set{T}"/> does: a tag takes an empty span, and an add inside an observer defers.</summary>
+    /// layout, as <see cref="Set{T}"/> does: a tag takes an empty span, and an add inside a query walk or an observer waits.</summary>
     /// <exception cref="ArgumentException"><paramref name="type"/> is not in this world's registry or holds managed references, or
     /// <paramref name="value"/> is not <see cref="ComponentDescriptor.Size"/> bytes long.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="type"/> is a relation or rows type, or the write fails as
     /// <see cref="Set{T}"/> would.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Set(
         Entity entity,
         ComponentDescriptor type,
@@ -284,41 +276,99 @@ public sealed partial class World
         where T : struct, IComponent
     {
         At(file, line);
-        Write(entity, registry.IndexOf<T>(), value, add: false);
+        CheckWritable();
+        ref var slot = ref Slot(entity);
+        var type = registry.IndexOf<T>();
+        ref var current = ref LocateStored<T>(entity, type, out var location);
+        if (Unsafe.IsNullRef(ref current) || location.Disabled)
+            ThrowNotReplaceable<T>(entity, !Unsafe.IsNullRef(ref current));
+        if (Records(slot, location, structural: false))
+            RecordSet(entity, type, value);
+        else
+            Overwrite(entity, ref slot, type, ref current, location, value);
         ThrowIndexConflicts();
     }
 
-    internal void Write<T>(Entity entity, int type, in T value, bool add = true)
+    internal void Write<T>(Entity entity, int type, in T value)
         where T : struct
     {
         CheckWritable();
         ref var slot = ref Slot(entity);
-        ref var current = ref LocateStored<T>(entity, type, out var location);
-        if (Unsafe.IsNullRef(ref current))
+        ref var current = ref Prepare<T>(entity, type, ref slot, out var location, out var kind);
+        switch (kind)
         {
-            if (!add)
-                ThrowNotReplaceable<T>(entity, false);
-            CheckStructural();
-            AddNew(entity, ref slot, type, value);
-            return;
+            case WriteKind.Record:
+                RecordSet(entity, type, value);
+                return;
+            case WriteKind.Add:
+                AddNew(entity, ref slot, type, value);
+                return;
         }
-        if (location.Disabled)
-        {
-            if (!add)
-                ThrowNotReplaceable<T>(entity, true);
-            CheckStructural();
-        }
-        if (location.Pending || (location.Disabled && Defers(slot)))
-        {
-            RecordSet(entity, ref slot, type, value);
-            return;
-        }
-        Overwrite(entity, type, ref current, location, value);
-        if (location.Disabled)
+        Overwrite(entity, ref slot, type, ref current, location, value);
+        if (kind == WriteKind.Enable)
             Toggle(entity, ref slot, type, true);
     }
 
-    void Overwrite<T>(Entity entity, int type, ref T current, in ValueLocation location, in T value)
+    // A batch never moves its entity before it closes, so everything but an overwrite records.
+    internal void WriteBatched<T>(Entity entity, in T value, string file, int line)
+        where T : struct, IComponent
+    {
+        At(file, line);
+        CheckWritable();
+        ref var slot = ref Slot(entity);
+        var type = registry.IndexOf<T>();
+        ref var current = ref Prepare<T>(entity, type, ref slot, out var location, out var kind);
+        if (kind == WriteKind.Overwrite)
+            Overwrite(entity, ref slot, type, ref current, location, value);
+        else
+            RecordSet(entity, type, value);
+        ThrowIndexConflicts();
+    }
+
+    enum WriteKind : byte
+    {
+        Overwrite,
+        Enable,
+        Add,
+        Record,
+    }
+
+    ref T Prepare<T>(
+        Entity entity,
+        int type,
+        ref EntitySlot slot,
+        out ValueLocation location,
+        out WriteKind kind
+    )
+        where T : struct
+    {
+        ref var current = ref LocateStored<T>(entity, type, out location);
+        if (Unsafe.IsNullRef(ref current))
+        {
+            Structural();
+            CheckComponent(type);
+            CheckRequires(entity, registry[type]);
+            ClaimSingleton(entity, type);
+            kind = RecordsStructure(slot) ? WriteKind.Record : WriteKind.Add;
+            return ref current;
+        }
+        if (location.Disabled)
+            Structural();
+        kind =
+            Records(slot, location, structural: location.Disabled) ? WriteKind.Record
+            : location.Disabled ? WriteKind.Enable
+            : WriteKind.Overwrite;
+        return ref current;
+    }
+
+    void Overwrite<T>(
+        Entity entity,
+        ref EntitySlot slot,
+        int type,
+        ref T current,
+        in ValueLocation location,
+        in T value
+    )
         where T : struct
     {
         var indexed = hasIndexes && layout.IndexBase[type] >= 0;
@@ -326,6 +376,13 @@ public sealed partial class World
         {
             case LocationKind.Overlay:
             {
+                if (
+                    !ComponentOpsOf<T>.Equals(
+                        ref Unsafe.As<T, byte>(ref current),
+                        ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in value))
+                    )
+                )
+                    EditedRecorded(entity, type);
                 var pending = indexed ? current : default;
                 FreeReplacedBuffers(type, ref current, in value);
                 current = value;
@@ -336,31 +393,31 @@ public sealed partial class World
             case LocationKind.Tag:
                 return;
         }
-        var equal = ComponentOpsOf<T>.Equals(
-            ref Unsafe.As<T, byte>(ref current),
-            ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in value))
-        );
-        if (equal)
+        if (
+            ComponentOpsOf<T>.Equals(
+                ref Unsafe.As<T, byte>(ref current),
+                ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in value))
+            )
+        )
             return;
         var previous = indexed ? current : default;
-        FreeReplacedBuffers(type, ref current, in value);
-        if ((registry[type].Traits & ComponentTraits.ReplaceOnly) != 0)
+        // The hot path holds only for a plain value; a replace-only capture or a buffer free is the applier's.
+        if (!layout.ReplaceOnly[type] && !layout.OwnsBuffers[type])
         {
-            var departing = current;
             current = value;
-            var present = !location.Disabled;
-            Report(
-                ComponentChange.Of(true, present, true, present, replaced: true),
-                entity,
-                type,
-                default,
-                ref Unsafe.As<T, byte>(ref departing),
-                ref Unsafe.As<T, byte>(ref current)
-            );
+            Stamp(location);
         }
         else
-            current = value;
-        Stamp(location);
+        {
+            var state = Kept(type, !location.Disabled, !location.Disabled, Tracking);
+            ApplyValue(
+                entity,
+                ref slot,
+                ref state,
+                ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in value))
+            );
+            Report(in state, entity, ref Unsafe.NullRef<byte>(), ref Unsafe.NullRef<byte>());
+        }
         if (indexed)
             RefreshChangedIndexes(entity, type, in previous, in current);
     }
@@ -376,11 +433,11 @@ public sealed partial class World
             );
     }
 
-    /// <summary>Adds the tag, or enables it when disabled; no-op when present. Inside an observer either waits for the next playback, and
-    /// reads see it at once.</summary>
+    /// <summary>Adds the tag, or enables it when disabled; no-op when present. Inside a query walk either waits until the walk closes, and
+    /// inside an observer until the next playback; reads see it at once.</summary>
     /// <exception cref="InvalidOperationException">The entity does not exist, lacks a component the tag requires, or the tag is a singleton
-    /// another entity holds, enabled or disabled; or a serial query body is running and the tag is absent or disabled.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// another entity holds, enabled or disabled.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void Add<T>(
         Entity entity,
         [CallerFilePath] string file = "",
@@ -389,7 +446,7 @@ public sealed partial class World
         where T : struct, ITag => Set(entity, default(T), file: file, line: line);
 
     /// <summary><see cref="Set{T}"/> when <paramref name="value"/> has a value, otherwise <see cref="Remove{T}"/>.</summary>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void SetOrRemove<T>(
         Entity entity,
         in T? value,
@@ -407,59 +464,25 @@ public sealed partial class World
     void AddNew<T>(Entity entity, ref EntitySlot slot, int type, in T value)
         where T : struct
     {
-        CheckComponent(type);
-        var descriptor = registry[type];
-        CheckRequires(entity, descriptor);
-        ClaimSingleton(entity, type);
-        if (Defers(slot))
-        {
-            RecordSet(entity, ref slot, type, value);
-            return;
-        }
-        switch (layout.Class[type])
-        {
-            case StorageClass.Sparse:
-                AddSparse(entity, type, value);
-                RefreshIndexes(entity, type);
-                return;
-            case StorageClass.SparseTag:
-                AddSparseTag(entity, ref slot, type);
-                return;
-        }
-        var target = WithType(slot.Placed, type);
-        MoveTo(entity, ref slot, target);
-        ref readonly var typeSlot = ref target.SlotAt(target.IndexOf(type));
-        ref var stored = ref Unsafe.As<T, byte>(ref TagValue<T>.Value);
-        if (typeSlot.Column >= 0)
-        {
-            ref var cell = ref target.Values<T>(typeSlot.Column)[slot.Row];
-            cell = value;
-            stored = ref Unsafe.As<T, byte>(ref cell);
-        }
-        if (Tracking && typeSlot.Tracked >= 0)
-            target.StampAdded(typeSlot.Tracked, slot.Row, version);
-        Report(
-            ComponentChange.Added,
-            entity,
-            type,
-            default,
-            ref Unsafe.NullRef<byte>(),
-            ref stored
-        );
+        if (layout.Class[type] is StorageClass.Column or StorageClass.SignatureTag)
+            MoveTo(entity, ref slot, WithType(slot.Placed, type));
+        AddStored(entity, ref slot, type, ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in value)));
         RefreshIndexes(entity, type);
     }
 
+    // The entity's archetype already holds a column or signature tag; a sparse type is added to its storage here.
+    void AddStored(Entity entity, ref EntitySlot slot, int type, ref byte value)
+    {
+        var state = Adding(type, Tracking);
+        ref var stored = ref ApplyState(entity, ref slot, ref state, ref value);
+        Report(in state, entity, ref Unsafe.NullRef<byte>(), ref stored);
+    }
+
     // The value rides with the recorded presence change, so playback reports the two as one net change.
-    void RecordSet<T>(Entity entity, ref EntitySlot slot, int type, in T value)
+    void RecordSet<T>(Entity entity, int type, in T value)
         where T : struct
     {
-        var payload = layout.Class[type] is StorageClass.Column or StorageClass.Sparse
-            ? stage.Payloads<T>(type).Add(value)
-            : -1;
-        stage.Record(CommandKind.Set, entity, type, payload);
-        overlay.Set(entity.Index, type, true, payload);
-        overlay.SetEnabled(entity.Index, type, true);
-        slot.Pending = true;
+        StageSet(entity, type, value);
         RefreshIndexes(entity, type);
     }
 
@@ -472,57 +495,17 @@ public sealed partial class World
     }
 
     internal void AddSparse<T>(Entity entity, int type, in T value)
-        where T : struct
-    {
-        var storage = (SparseStorage<T>)SparseFor(type);
-        ref var cell = ref storage.Add(entity, value, out var at);
-        allocator.Slots[entity.Index].SparseCount++;
-        if (Tracking && registry[type].IsStamped)
-            storage.StampAdded(at, version);
-        Report(
-            ComponentChange.Added,
+        where T : struct =>
+        AddStored(
             entity,
+            ref allocator.Slots[entity.Index],
             type,
-            default,
-            ref Unsafe.NullRef<byte>(),
-            ref Unsafe.As<T, byte>(ref cell)
+            ref Unsafe.As<T, byte>(ref Unsafe.AsRef(in value))
         );
-    }
 
-    void AddSparseTag(Entity entity, ref EntitySlot slot, int type)
-    {
-        if (
-            (sparseTags[layout.SparseTagSlot[type]] ??= new SparseTagStorage(type)).Set(
-                entity.Index,
-                true
-            )
-        )
-            slot.SparseCount++;
-        Report(
-            ComponentChange.Added,
-            entity,
-            type,
-            default,
-            ref Unsafe.NullRef<byte>(),
-            ref Unsafe.NullRef<byte>()
-        );
-    }
-
-    internal void StageBundled<T>(Entity entity, in T value)
-        where T : struct
-    {
-        var type = registry.IndexOf<T>();
-        var payload = layout.Class[type] is StorageClass.Column or StorageClass.Sparse
-            ? stage.Payloads<T>(type).Add(value)
-            : -1;
-        stage.Record(CommandKind.Set, entity, type, payload);
-        overlay.Set(entity.Index, type, true, payload);
-    }
-
-    /// <summary>Removes the stored component, enabled or disabled; false when the entity stores none or does not exist. Inside an observer
-    /// the removal waits for the next playback, and reads see it at once.</summary>
-    /// <exception cref="InvalidOperationException">A serial query body is running.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <summary>Removes the stored component, enabled or disabled; false when the entity stores none or does not exist. Inside a query walk
+    /// the removal waits until the walk closes, and inside an observer until the next playback; reads see it at once.</summary>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public bool Remove<T>(
         Entity entity,
         [CallerFilePath] string file = "",
@@ -532,16 +515,15 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
-        CheckStructural();
+        Structural();
         return RemoveComponent(entity, registry.IndexOf<T>());
     }
 
     /// <summary>Removes the stored component <paramref name="type"/>, enabled or disabled, as <see cref="Remove{T}"/> does, and returns
-    /// false when the entity stores none or does not exist; inside an observer the removal defers.</summary>
+    /// false when the entity stores none or does not exist; inside a query walk or an observer the removal waits.</summary>
     /// <exception cref="ArgumentException"><paramref name="type"/> is not in this world's registry.</exception>
-    /// <exception cref="InvalidOperationException"><paramref name="type"/> is a relation or rows type, or a serial query body is
-    /// running.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    /// <exception cref="InvalidOperationException"><paramref name="type"/> is a relation or rows type.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public bool Remove(
         Entity entity,
         ComponentDescriptor type,
@@ -551,7 +533,7 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
-        CheckStructural();
+        Structural();
         var index = ComponentIndex(type);
         return RemoveComponent(entity, index);
     }
@@ -560,88 +542,64 @@ public sealed partial class World
     {
         if (!allocator.IsCurrent(entity) || !IsStored(entity, type))
             return false;
-        RemoveType(entity, ref allocator.Slots[entity.Index], type, default);
+        ref var slot = ref allocator.Slots[entity.Index];
+        if (RecordsStructure(slot))
+            RecordRemove(entity, type);
+        else
+            RemoveStored(entity, ref slot, type);
         return true;
     }
 
-    internal void RemoveType(Entity entity, ref EntitySlot slot, int type, LifecycleReason reason)
+    internal bool RemoveBatched<T>(Entity entity, string file, int line)
+        where T : struct, IComponent
     {
-        if (Defers(slot))
-        {
-            stage.Record(CommandKind.Remove, entity, type);
-            overlay.Set(entity.Index, type, false, -1);
-            slot.Pending = true;
-            ReleaseSingleton(entity, type);
-            RefreshIndexes(entity, type);
-            return;
-        }
-        switch (layout.Class[type])
-        {
-            case StorageClass.Sparse:
-            {
-                var storage = StoredSparse(type);
-                ref var value = ref storage.RowRef(storage.SlotOf(entity.Index));
-                Vacating(entity, type, ref value);
-                Report(
-                    ComponentChange.Removed(true),
-                    entity,
-                    type,
-                    reason,
-                    ref value,
-                    ref Unsafe.NullRef<byte>()
-                );
-                if (storage.Remove(entity.Index))
-                    slot.SparseCount--;
-                ReleaseSingleton(entity, type);
-                RefreshIndexes(entity, type);
-                return;
-            }
-            case StorageClass.SparseTag:
-                Vacating(entity, type, ref Unsafe.NullRef<byte>());
-                Report(
-                    ComponentChange.Removed(true),
-                    entity,
-                    type,
-                    reason,
-                    ref Unsafe.NullRef<byte>(),
-                    ref Unsafe.NullRef<byte>()
-                );
-                if (sparseTags[layout.SparseTagSlot[type]]?.Set(entity.Index, false) == true)
-                    slot.SparseCount--;
-                ReleaseSingleton(entity, type);
-                return;
-        }
-        var source = slot.Placed;
-        var column = source.ColumnSlot(type);
-        ref var departing = ref column >= 0
-            ? ref source.RowRef(column, slot.Row)
-            : ref Unsafe.NullRef<byte>();
-        if (WatchesRemoval(type))
-            Vacating(entity, type, ref departing);
-        var enable = source.EnableSlot(type);
-        Report(
-            ComponentChange.Removed(enable < 0 || source.IsEnabled(enable, slot.Row)),
-            entity,
-            type,
-            reason,
-            ref departing,
-            ref Unsafe.NullRef<byte>()
-        );
-        MoveTo(entity, ref slot, WithoutType(source, type));
+        At(file, line);
+        CheckWritable();
+        Structural();
+        var type = registry.IndexOf<T>();
+        if (!allocator.IsCurrent(entity) || !IsStored(entity, type))
+            return false;
+        RecordRemove(entity, type);
+        return true;
+    }
+
+    void RecordRemove(Entity entity, int type)
+    {
+        Stage(CommandKind.Remove, entity, type);
         ReleaseSingleton(entity, type);
+        RefreshIndexes(entity, type);
+    }
+
+    void PropagateRemoval(Entity entity, int type)
+    {
+        if (layout.PropagatesToAncestors[type] || layout.PropagatesToSources[type])
+            Propagate(entity, type, version);
+    }
+
+    void RemoveStored(Entity entity, ref EntitySlot slot, int type)
+    {
+        var column = layout.Class[type] is StorageClass.Column or StorageClass.SignatureTag;
+        var enabled =
+            !column
+            || slot.Placed.EnableSlot(type) is not (var enable and >= 0)
+            || slot.Placed.IsEnabled(enable, slot.Row);
+        var state = Removing(type, enabled, Tracking);
+        ref var departing = ref StoredValue(entity, type);
+        Vacating(type, ref departing);
+        Report(in state, entity, ref departing, ref Unsafe.NullRef<byte>());
+        if (column)
+            MoveTo(entity, ref slot, WithoutType(slot.Placed, type));
+        ApplyState(entity, ref slot, ref state, ref Unsafe.NullRef<byte>());
         RefreshIndexes(entity, type);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool WatchesRemoval(int type) =>
-        coreHooks.Count > 0
-        || layout.OwnsBuffers[type]
+        layout.OwnsBuffers[type]
         || (observers.AnyRemove && observers.For(type) is { WantsRemove: true });
 
-    void Vacating(Entity entity, int type, ref byte value)
+    void Vacating(int type, ref byte value)
     {
-        foreach (var hook in coreHooks)
-            hook.OnRemoving(this, entity, type, ref value);
         if (layout.OwnsBuffers[type] && !Unsafe.IsNullRef(ref value))
             FreeBuffers(type, ref value);
     }
@@ -655,7 +613,7 @@ public sealed partial class World
         bool present = true
     )
     {
-        Vacating(entity, type, ref value);
+        Vacating(type, ref value);
         if (present)
             observers.QueueRemove(
                 entity,
@@ -666,11 +624,10 @@ public sealed partial class World
     }
 
     /// <summary>Enables or disables the entity's stored <typeparamref name="T"/>, stamping it if the state changes; disabling one the
-    /// entity lacks does nothing. Inside an observer, or while the entity has changes waiting for playback, the flip waits for the next
-    /// playback, and reads see it at once.</summary>
+    /// entity lacks does nothing. Inside a query walk the flip waits until the walk closes, and inside an observer, or while the entity has
+    /// changes waiting for playback, until the next playback; reads see it at once.</summary>
     /// <exception cref="InvalidOperationException">Enabling a <typeparamref name="T"/> the entity lacks (add it with <see cref="Set{T}"/>
-    /// or <see cref="Add{T}"/>), re-enabling one breaks a unique index, the entity does not exist, or a serial query body is
-    /// running.</exception>
+    /// or <see cref="Add{T}"/>), re-enabling one breaks a unique index, or the entity does not exist.</exception>
     [Effect(Effects.Structural | Effects.Mutates)]
     public void SetEnabled<T>(
         Entity entity,
@@ -682,10 +639,11 @@ public sealed partial class World
     {
         At(file, line);
         CheckWritable();
-        CheckStructural();
+        Structural();
         ref var slot = ref Slot(entity);
-        if (!Toggle(entity, ref slot, registry.IndexOf<T>(), enabled) && enabled)
-            throw NotEnableable<T>(entity);
+        var type = registry.IndexOf<T>();
+        if (!Toggle(entity, ref slot, type, enabled) && enabled)
+            throw new InvalidOperationException(NoneToEnable(type, entity));
         ThrowIndexConflicts();
     }
 
@@ -695,37 +653,30 @@ public sealed partial class World
         {
             if (!present)
                 return false;
-            stage.Record(enabled ? CommandKind.Enable : CommandKind.Disable, entity, type);
-            overlay.SetEnabled(entity.Index, type, enabled);
-            RefreshIndexes(entity, type);
-            return true;
         }
-        if (slot.Archetype?.EnableSlot(type) is not (int enable and >= 0))
-            return false;
-        var archetype = slot.Archetype;
-        if (archetype.IsEnabled(enable, slot.Row) == enabled)
-            return true;
-        if (Defers(slot))
+        else
         {
-            stage.Record(enabled ? CommandKind.Enable : CommandKind.Disable, entity, type);
-            overlay.Set(entity.Index, type, true, PendingOverlay.Stored);
-            overlay.SetEnabled(entity.Index, type, enabled);
-            slot.Pending = true;
-            RefreshIndexes(entity, type);
-            return true;
+            if (slot.Archetype?.EnableSlot(type) is not (int enable and >= 0))
+                return false;
+            if (slot.Archetype.IsEnabled(enable, slot.Row) == enabled)
+                return true;
+            if (!RecordsStructure(slot))
+            {
+                Flip(entity, ref slot, type, enabled);
+                return true;
+            }
         }
-        archetype.SetEnabled(enable, slot.Row, enabled);
-        if (Tracking && archetype.TrackedSlot(type) is var tracked and >= 0)
-            archetype.Stamp(tracked, slot.Row, version);
-        var column = archetype.ColumnSlot(type);
-        ref var value = ref column >= 0
-            ? ref archetype.RowRef(column, slot.Row)
-            : ref Unsafe.NullRef<byte>();
-        Report(ComponentChange.Toggled(enabled), entity, type, default, ref value, ref value);
+        Stage(enabled ? CommandKind.Enable : CommandKind.Disable, entity, type);
         RefreshIndexes(entity, type);
-        if (layout.InheritedSlot[type] > 0 && hierarchy.HasChildren(entity))
-            RefreshChildren(entity);
         return true;
+    }
+
+    void Flip(Entity entity, ref EntitySlot slot, int type, bool enabled)
+    {
+        var state = Kept(type, !enabled, enabled, Tracking);
+        ref var value = ref ApplyValue(entity, ref slot, ref state, ref Unsafe.NullRef<byte>());
+        Report(in state, entity, ref value, ref value);
+        RefreshIndexes(entity, type);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -779,7 +730,7 @@ public sealed partial class World
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    ref T FindSlow<T>(Entity entity, int type, out ValueLocation location)
+    internal ref T FindSlow<T>(Entity entity, int type, out ValueLocation location)
         where T : struct
     {
         location = default;
@@ -808,6 +759,19 @@ public sealed partial class World
             location.Kind = LocationKind.Overlay;
             return ref stage.Payloads<T>(type)[payload];
         }
+        return ref Probe<T>(entity, in slot, type, overlaidEnabled, ref location);
+    }
+
+    // Storage only, the overlay already consulted: a recorded flip arrives as overlaidEnabled.
+    ref T Probe<T>(
+        Entity entity,
+        scoped in EntitySlot slot,
+        int type,
+        bool? overlaidEnabled,
+        scoped ref ValueLocation location
+    )
+        where T : struct
+    {
         switch (layout.Class[type])
         {
             case StorageClass.Column:
@@ -822,7 +786,7 @@ public sealed partial class World
                 location.Archetype = archetype;
                 location.Row = slot.Row;
                 location.Tracked = typeSlot.Tracked;
-                location.Pending = overlaidEnabled is not null;
+                location.FlipRecorded = overlaidEnabled is not null;
                 location.Disabled = overlaidEnabled is { } columnEnabled
                     ? !columnEnabled
                     : typeSlot.Enable >= 0 && !archetype.IsEnabled(typeSlot.Enable, slot.Row);
@@ -840,7 +804,7 @@ public sealed partial class World
                 location.Archetype = archetype;
                 location.Row = slot.Row;
                 location.Tracked = tagSlot.Tracked;
-                location.Pending = overlaidEnabled is not null;
+                location.FlipRecorded = overlaidEnabled is not null;
                 location.Disabled = overlaidEnabled is { } tagEnabled
                     ? !tagEnabled
                     : tagSlot.Enable >= 0 && !archetype.IsEnabled(tagSlot.Enable, slot.Row);
@@ -856,7 +820,7 @@ public sealed partial class World
                 location.Kind = LocationKind.Sparse;
                 location.Sparse = storage;
                 location.Row = at;
-                location.Tracked = registry[type].IsStamped ? 0 : -1;
+                location.Tracked = storage.Stamped ? 0 : -1;
                 return ref Unsafe.As<SparseStorage<T>>(storage).Values[at];
             }
             case StorageClass.SparseTag:
@@ -885,6 +849,11 @@ public sealed partial class World
         Debug.Assert(registry[type].IsTracked);
         if (Unsafe.IsNullRef(ref Locate<T>(entity, type, out var location)))
             return 0;
+        if (location.Kind == LocationKind.Overlay)
+        {
+            location = default;
+            Probe<T>(entity, in allocator.Slots[entity.Index], type, null, ref location);
+        }
         return location.Kind switch
         {
             LocationKind.Column
@@ -950,18 +919,11 @@ public sealed partial class World
                 : $"{entity} has no {typeof(T).Name} to replace; Replace never adds a component, so add it with Set."
         );
 
-    static InvalidOperationException NotEnableable<T>(Entity entity) =>
-        new(
-            $"{entity} has no {typeof(T).Name} to enable; add it with Set or Add, which also enable a disabled one."
-        );
+    internal string NoneToEnable(int type, Entity entity) =>
+        $"{entity} has no {registry[type].Name} to enable; add it with Set or Add, which also enable a disabled one.";
 }
 
 internal static class ZeroBytes
 {
     public static byte Value;
-}
-
-internal interface ICoreHook
-{
-    void OnRemoving(World world, Entity entity, int type, ref byte value);
 }

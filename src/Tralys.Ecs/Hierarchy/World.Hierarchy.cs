@@ -9,11 +9,15 @@ public sealed partial class World
     bool[] inheritedScratch = [];
 
     /// <summary>Makes <paramref name="child"/> a child of <paramref name="parent"/> at <paramref name="index"/>; -1 puts it last, also when it
-    /// is already a child of <paramref name="parent"/>. The moved subtree's depth and inherited bits follow at once; for an entity an
-    /// observer created, or while either entity has changes waiting, the move waits for the next playback and reads see it then.</summary>
+    /// is already a child of <paramref name="parent"/>. The moved subtree's depth and inherited bits follow at once; inside a query walk the
+    /// move waits until the walk closes, and for an entity an observer created, or while either entity has changes waiting, until the next
+    /// playback; reads see it then.</summary>
     /// <exception cref="ArgumentException"><paramref name="parent"/> is null; use <see cref="ClearParent"/>.</exception>
-    /// <exception cref="InvalidOperationException">The move would make a cycle, or a serial query body is running.</exception>
-    [Effect(Effects.Structural | Effects.Mutates)]
+    /// <exception cref="TargetPolicyException">Under a dying <paramref name="parent"/> the subtree would take a <see cref="TargetPolicy.Throw"/>
+    /// target from a source that outlives it, or out of a dying one it would revive a source of such an edge onto a dying
+    /// target.</exception>
+    /// <exception cref="InvalidOperationException">The move would make a cycle.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void SetParent(
         Entity child,
         Entity parent,
@@ -25,13 +29,15 @@ public sealed partial class World
         CheckParent(parent);
         At(file, line);
         if (!RecordsReparent(child, parent, index))
-            Reparent(child, parent, index, default, guardTargets: true);
+            Reparent(child, parent, index, default);
+        VerifyInvariants();
     }
 
-    /// <summary>Takes <paramref name="child"/> out of its parent's children, making it a root; while it has changes waiting, at the next
-    /// playback.</summary>
-    /// <exception cref="InvalidOperationException">A serial query body is running.</exception>
-    [Effect(Effects.Structural | Effects.Mutates)]
+    /// <summary>Takes <paramref name="child"/> out of its parent's children, making it a root; inside a query walk once the walk closes, and
+    /// while it has changes waiting at the next playback.</summary>
+    /// <exception cref="TargetPolicyException">Leaving a dying parent would revive the source of a <see cref="TargetPolicy.Throw"/> edge onto
+    /// a dying target.</exception>
+    [Effect(Effects.Structural | Effects.MovesEntities | Effects.Mutates)]
     public void ClearParent(
         Entity child,
         [CallerFilePath] string file = "",
@@ -40,27 +46,54 @@ public sealed partial class World
     {
         At(file, line);
         if (!RecordsReparent(child, default, -1))
-            Reparent(child, default, -1, default, guardTargets: true);
+            Reparent(child, default, -1, default);
+        VerifyInvariants();
     }
 
+    // A call is checked against the hierarchy as recorded, so the reparents that wait never form a cycle.
     bool RecordsReparent(Entity child, Entity parent, int index)
     {
         CheckWritable();
-        CheckStructural();
+        Structural();
         ref var slot = ref Slot(child);
-        if (!DefersLifecycle(slot) && (parent.IsDefault || !DefersLifecycle(Slot(parent))))
-            return false;
-        if (!parent.IsDefault)
+        if (!RecordsLifecycle(slot) && (parent.IsDefault || !RecordsLifecycle(Slot(parent))))
         {
-            Slot(parent);
-            if (parent == child)
-                throw new InvalidOperationException($"{child} cannot be its own parent.");
-            if (!IsLive(parent))
-                CheckTargetPolicy(child);
+            if (!parent.IsDefault && recordedParents.Count > 0)
+                CheckCycle(child, parent, asRecorded: true);
+            return false;
         }
+        if (!parent.IsDefault)
+            CheckParentable(child, parent, asRecorded: true);
         stage.Record(CommandKind.SetParent, child, payload: index, other: parent);
-        slot.Pending = true;
+        NoteRecordedParent(child, parent);
+        MarkPending(ref slot);
         return true;
+    }
+
+    void CheckParentable(Entity child, Entity parent, bool asRecorded)
+    {
+        Slot(parent);
+        if (parent == child)
+            throw new InvalidOperationException($"{child} cannot be its own parent.");
+        CheckCycle(child, parent, asRecorded);
+        // A recorded destroy of the parent is judged with this reparent at playback, so only settled liveness counts here.
+        if (!MayLive(parent))
+            CheckTargetPolicy(child);
+    }
+
+    void CheckCycle(Entity child, Entity parent, bool asRecorded)
+    {
+        for (
+            var up = parent;
+            !up.IsDefault;
+            up = asRecorded ? ParentAsRecorded(up) : hierarchy.ParentOf(up)
+        )
+        {
+            if (up == child)
+                throw new InvalidOperationException(
+                    $"Parenting {child} under {parent} would make a cycle."
+                );
+        }
     }
 
     internal static void CheckParent(Entity parent)
@@ -106,31 +139,12 @@ public sealed partial class World
         return false;
     }
 
-    internal void Reparent(
-        Entity child,
-        Entity parent,
-        int index,
-        LifecycleReason reason,
-        bool guardTargets
-    )
+    internal void Reparent(Entity child, Entity parent, int index, LifecycleReason reason)
     {
         CheckWritable();
         Slot(child);
         if (!parent.IsDefault)
-        {
-            Slot(parent);
-            if (parent == child)
-                throw new InvalidOperationException($"{child} cannot be its own parent.");
-            for (var up = parent; !up.IsDefault; up = hierarchy.ParentOf(up))
-            {
-                if (up == child)
-                    throw new InvalidOperationException(
-                        $"Parenting {child} under {parent} would make a cycle."
-                    );
-            }
-            if (guardTargets && !IsLive(parent))
-                CheckTargetPolicy(child);
-        }
+            CheckParentable(child, parent, asRecorded: false);
         var old = hierarchy.ParentOf(child);
         if (old == parent)
         {
@@ -149,6 +163,13 @@ public sealed partial class World
             RaiseDescendants(child, version);
             return;
         }
+        if (
+            (parent.IsDefault || MayLive(parent))
+            && !OwnsDestroy(allocator.Slots[child.Index])
+            && UnderPendingDestroy(child)
+            && RevivalFault(child) is { } revival
+        )
+            throw revival;
         var wasPending =
             changes.Wants(-1, LogKind.DestroyCancelled)
             && StateOf(child) == LifecycleState.PendingDestroy;
@@ -180,16 +201,14 @@ public sealed partial class World
     }
 
     // Every caller passes a root that was pending destroy, so each entity found no longer pending was spared.
-    internal void LogSpared(Entity root, HashSet<Entity>? logged = null)
+    internal void LogSpared(Entity root)
     {
-        if (!changes.Wants(-1, LogKind.DestroyCancelled))
-            return;
         var count = 0;
         Push(ref count, root);
         while (count > 0)
         {
             var entity = walk[--count];
-            if (StateOf(entity) == LifecycleState.PendingDestroy || logged?.Add(entity) == false)
+            if (StateOf(entity) == LifecycleState.PendingDestroy)
                 continue;
             changes.Append(LogKind.DestroyCancelled, entity, -1, default);
             foreach (var child in hierarchy.ChildrenOf(entity))
@@ -280,23 +299,38 @@ public sealed partial class World
             RefreshUnplaced(child);
             return;
         }
-        var parent = hierarchy.ParentOf(child);
+        InheritedOf(hierarchy.ParentOf(child));
+        if (TakeInherited(child, archetype, slot.Row) && hierarchy.HasChildren(child))
+            RefreshChildren(child);
+    }
+
+    void InheritedOf(Entity parent)
+    {
+        var kinds = layout.InheritedCount;
+        if (inheritedScratch.Length < kinds)
+            inheritedScratch = new bool[kinds];
+        for (var kind = 0; kind < kinds; kind++)
+            inheritedScratch[kind] = !parent.IsDefault && Effective(parent, kind);
+    }
+
+    // True when a bit the child does not set itself flipped, so its own children follow.
+    bool TakeInherited(Entity child, Archetype archetype, int row)
+    {
         var changed = false;
         var pendingFlipped = false;
         for (var kind = 0; kind < layout.InheritedCount; kind++)
         {
-            var on = !parent.IsDefault && Effective(parent, kind);
-            if (archetype.HasAncestor(kind, slot.Row) == on)
+            var on = inheritedScratch[kind];
+            if (archetype.HasAncestor(kind, row) == on)
                 continue;
-            archetype.SetAncestor(kind, slot.Row, on);
-            var flipped = !SelfBit(archetype, slot.Row, kind);
+            archetype.SetAncestor(kind, row, on);
+            var flipped = !SelfBit(archetype, row, kind);
             changed |= flipped;
             pendingFlipped |= flipped && kind == 0;
         }
         if (pendingFlipped)
             RefreshAllIndexes(child);
-        if (changed && hierarchy.HasChildren(child))
-            RefreshChildren(child);
+        return changed;
     }
 
     void RefreshUnplaced(Entity entity)
@@ -308,16 +342,12 @@ public sealed partial class World
 
     internal void RefreshChildren(Entity root)
     {
-        var kinds = layout.InheritedCount;
-        if (inheritedScratch.Length < kinds)
-            inheritedScratch = new bool[kinds];
         var count = 0;
         Push(ref count, root);
         while (count > 0)
         {
             var parent = walk[--count];
-            for (var kind = 0; kind < kinds; kind++)
-                inheritedScratch[kind] = Effective(parent, kind);
+            InheritedOf(parent);
             foreach (var child in hierarchy.ChildrenOf(parent))
             {
                 ref var slot = ref allocator.Slots[child.Index];
@@ -328,60 +358,13 @@ public sealed partial class World
                         Push(ref count, child);
                     continue;
                 }
-                var changed = false;
-                var pendingFlipped = false;
-                for (var kind = 0; kind < kinds; kind++)
-                {
-                    var on = inheritedScratch[kind];
-                    if (archetype.HasAncestor(kind, slot.Row) == on)
-                        continue;
-                    archetype.SetAncestor(kind, slot.Row, on);
-                    var flipped = !SelfBit(archetype, slot.Row, kind);
-                    changed |= flipped;
-                    pendingFlipped |= flipped && kind == 0;
-                }
-                if (pendingFlipped)
-                    RefreshAllIndexes(child);
-                if (!changed)
+                if (!TakeInherited(child, archetype, slot.Row))
                     continue;
                 hierarchy.RaiseAncestors(child, version);
                 if (hierarchy.HasChildren(child))
                     Push(ref count, child);
             }
         }
-    }
-
-    // Children first, so a subtree is released bottom-up and each parent is still whole while its children go.
-    void GatherSubtree(Entity root, List<Entity> into)
-    {
-        if (hierarchy.IsEmpty)
-        {
-            gathered[root.Index] = Gathered;
-            into.Add(root);
-            return;
-        }
-        var start = into.Count;
-        var count = 0;
-        Push(ref count, root);
-        while (count > 0)
-        {
-            var entity = walk[--count];
-            if (gathered[entity.Index] != 0)
-                continue;
-            gathered[entity.Index] = Gathered;
-            into.Add(entity);
-            ref var slot = ref allocator.Slots[entity.Index];
-            if (slot.State != LifecycleState.PendingDestroy)
-            {
-                inheriting.Add((entity, slot.State));
-                slot.State = LifecycleState.PendingDestroy;
-                slot.DestroyReason = LifecycleReason.Cascade;
-                attributed?.InheritDestroy(entity.Index, root.Index);
-            }
-            foreach (var child in hierarchy.ChildrenOf(entity))
-                Push(ref count, child);
-        }
-        into.Reverse(start, into.Count - start);
     }
 
     void ReleaseHierarchy(Entity entity, LifecycleReason reason)

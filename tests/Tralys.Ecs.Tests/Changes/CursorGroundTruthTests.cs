@@ -119,7 +119,7 @@ public sealed class CursorGroundTruthTests
                 $"op {op}, cursor {world.Changes.NameOf(cursor)}: saw {seen.Count}, expected {expected.Count}; "
                     + $"missing {string.Join(",", expected.Except(seen))}, extra {string.Join(",", seen.Except(expected))}"
             );
-        world.Changes.Commit(cursor, read.Until);
+        world.Changes.Commit(cursor, read.Window);
         expected.Clear();
     }
 }

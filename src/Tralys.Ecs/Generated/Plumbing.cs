@@ -32,8 +32,8 @@ public static class Plumbing
         where TKey : notnull => world.OrderedIndexOf<TComponent, TKey>(ordinal);
 
     /// <summary>The value of <typeparamref name="T"/> on <paramref name="entity"/>'s parent, for generated <see cref="Parent{T}"/> terms.</summary>
-    public static Parent<T> ParentTerm<T>(World world, Entity entity)
-        where T : struct, IComponent => world.ParentTerm<T>(entity);
+    public static Parent<T> ParentTerm<T>(in ChunkView chunk, Entity entity)
+        where T : struct, IComponent => chunk.world.ParentTerm<T>(entity);
 
     /// <summary>The keyed rows of <typeparamref name="TRow"/> on <paramref name="entity"/>, behind the generated per-row-type accessor
     /// such as <c>world.EffectRows(entity)</c>. Reading never creates storage.</summary>
@@ -53,8 +53,38 @@ public static class Plumbing
         where TKey : notnull
         where TRow : struct, IRow<TKey> => commands.Rows<TKey, TRow>(entity);
 
-    /// <summary>The rows the query visits in <paramref name="chunk"/>, one bit per row.</summary>
+    /// <summary>The rows the query visits in <paramref name="chunk"/>, one bit per row, as the chunk opened; pass each to <see cref="Visits"/>.</summary>
     public static ulong RowMask(in ChunkView chunk) => chunk.RowMask;
+
+    /// <summary>False for a row of <see cref="RowMask"/> whose entity has since recorded a change that takes it out of the query, or whose
+    /// ancestor has recorded a destroy or detach.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(
+        System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
+    )]
+    public static bool Visits(in ChunkView chunk, int row) => chunk.Visits(row);
+
+    /// <summary>Whether <paramref name="row"/>'s entity has recorded changes storage does not show yet; its value terms then read through
+    /// <see cref="Overlay"/>.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(
+        System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining
+    )]
+    public static bool Pending(in ChunkView chunk, int row) => chunk.IsPending(row);
+
+    /// <summary>What a <see cref="Pending"/> row's recorded changes say of value term <paramref name="term"/>: -1 nothing, so storage
+    /// decides; 0 absent or disabled; 1 present, read through <see cref="Overlaid{T}"/>.</summary>
+    public static int Overlay(in ChunkView chunk, int term, int row) => chunk.Overlay(term, row);
+
+    /// <summary>Value term <paramref name="term"/> of a row <see cref="Overlay"/> reports present. When <paramref name="recorded"/>, the
+    /// value lives in the recorded change, whose apply stamps it, so the row is not released; otherwise it is in storage, at sparse
+    /// <paramref name="slot"/>, or -1 for a column.</summary>
+    public static ref T Overlaid<T>(
+        in ChunkView chunk,
+        int term,
+        int row,
+        out bool recorded,
+        out int slot
+    )
+        where T : struct => ref chunk.Overlaid<T>(term, row, out recorded, out slot);
 
     /// <summary>The column of value term <paramref name="term"/>, or an empty span when the archetype lacks it.</summary>
     public static Span<T> Column<T>(in ChunkView chunk, int term) => chunk.Column<T>(term);

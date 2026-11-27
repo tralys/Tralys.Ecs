@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Tralys.Ecs/Tralys.Ecs.csproj" />
     <ProjectReference Include="../../src/Tralys.Ecs.Testing/Tralys.Ecs.Testing.csproj" />
+    <ProjectReference Include="../../src/Tralys.Ecs.Executor.Pool/Tralys.Ecs.Executor.Pool.csproj" />
     <ProjectReference
       Include="../../src/Tralys.Ecs.Generators/Tralys.Ecs.Generators.csproj"
       OutputItemType="Analyzer"

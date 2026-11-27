@@ -168,4 +168,128 @@ public sealed partial class ResetDeterminismTests
             .That(afterReset)
             .IsEquivalentTo(onFresh, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
+
+    static void Scramble(World world, Random random, List<Entity> made)
+    {
+        for (var i = 0; i < 6; i++)
+        {
+            var live = made.Where(world.IsLive).Distinct().ToList();
+            if (live.Count == 0 || random.Next(6) == 0)
+            {
+                made.Add(world.Create());
+                continue;
+            }
+            var entity = live[random.Next(live.Count)];
+            var other = live[random.Next(live.Count)];
+            try
+            {
+                switch (random.Next(10))
+                {
+                    case 0:
+                        world.Set(entity, new Position { X = random.Next(9) });
+                        break;
+                    case 1:
+                        world.Remove<Position>(entity);
+                        break;
+                    case 2:
+                        world.Set(entity, new Velocity { X = random.Next(9) });
+                        break;
+                    case 3:
+                        world.Set(entity, new Health { Value = random.Next(9) });
+                        break;
+                    case 4:
+                        world.Add<Npc>(entity);
+                        break;
+                    case 5:
+                        world.Remove<Npc>(entity);
+                        break;
+                    case 6:
+                        if (random.Next(2) == 0)
+                            world.Detach(entity);
+                        else
+                            world.Reattach(entity);
+                        break;
+                    case 7:
+                        world.Destroy(entity);
+                        break;
+                    case 8:
+                        world.SetParent(entity, other);
+                        break;
+                    default:
+                        world.Relate<Follows>(entity, other);
+                        break;
+                }
+            }
+            catch (InvalidOperationException error) when (error is not BrokenInvariantException) { }
+        }
+        world.Playback();
+    }
+
+    [Test]
+    public async Task Resetting_to_snapshots_in_any_order_brings_back_what_each_held()
+    {
+        var random = new Random(17);
+        using var world = TestWorlds.Create();
+        var made = new List<Entity>();
+        var taken =
+            new List<(
+                WorldSnapshot Snapshot,
+                Entity[] Roots,
+                CaptureImage Image,
+                List<Entity> Placed
+            )>();
+        var mismatches = new List<string>();
+        for (var step = 0; step < 300; step++)
+        {
+            if (taken.Count > 0 && random.Next(3) == 0)
+            {
+                var at = random.Next(taken.Count);
+                var (snapshot, roots, image, placed) = taken[at];
+                world.Reset(snapshot);
+                var seen = new List<Entity>();
+                RunPlaced(world, seen);
+                var differences = CaptureImage.Compare(image, world.Capture(roots));
+                if (differences.Count > 0 || !seen.SequenceEqual(placed))
+                    mismatches.Add(
+                        $"step {step}, snapshot {at}: {string.Join("; ", differences.Take(3))}; queried {seen.Count} of {placed.Count}"
+                    );
+                continue;
+            }
+            Scramble(world, random, made);
+            if (random.Next(2) == 0)
+            {
+                var roots = made.Where(e => world.StateOf(e) == LifecycleState.Alive)
+                    .Distinct()
+                    .ToArray();
+                var placed = new List<Entity>();
+                RunPlaced(world, placed);
+                taken.Add((world.Snapshot(), roots, world.Capture(roots), placed));
+            }
+        }
+
+        await Assert.That(mismatches).IsEmpty();
+        await Assert.That(taken.Count).IsGreaterThan(20);
+    }
+
+    [Test]
+    public async Task A_sparse_borrow_taken_before_a_reset_that_drops_its_storage_throws()
+    {
+        using var world = TestWorlds.Create(new WorldOptions { CheckBorrows = true });
+        var baseline = world.Snapshot();
+        var entity = world.Create();
+        world.Set(entity, new Dialog { Page = 7 });
+
+        await Assert
+            .That(() => ReadAcrossReset(world, entity, baseline))
+            .Throws<InvalidOperationException>();
+    }
+
+#pragma warning disable TECS0019
+    static int ReadAcrossReset(World world, Entity entity, WorldSnapshot baseline)
+    {
+        var found = world.Find<Dialog>(entity);
+        world.Reset(baseline);
+        return found.Value.Page;
+    }
+#pragma warning restore TECS0019
 }

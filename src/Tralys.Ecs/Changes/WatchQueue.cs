@@ -17,11 +17,32 @@ internal sealed class WatchQueue(int slot, LogKinds[] kinds, bool takesRaises, i
     public readonly int Slot = slot;
     public readonly LogKinds[] Kinds = kinds;
     public readonly bool TakesRaises = takesRaises;
-    public readonly List<WatchEvent> Events = [];
-    public readonly List<Entity> Raised = [];
     readonly Lock raising = new();
+    List<WatchEvent> takenEvents = [];
+    List<Entity> takenRaised = [];
 
+    public List<WatchEvent> Events { get; private set; } = [];
+    public List<Entity> Raised { get; private set; } = [];
     public bool Overflowed { get; private set; }
+
+    // A collect works on what was queued before it began; what its callbacks change queues for the next.
+    public bool Take(out List<WatchEvent> events, out List<Entity> raised)
+    {
+        lock (raising)
+        {
+            events = Events;
+            raised = Raised;
+            Events = takenEvents;
+            Raised = takenRaised;
+            Events.Clear();
+            Raised.Clear();
+            takenEvents = events;
+            takenRaised = raised;
+            var overflowed = Overflowed;
+            Overflowed = false;
+            return overflowed;
+        }
+    }
 
     public bool Wants(int type, LogKind kind) =>
         type < 0 ? EntityKinds.Has(kind) : type < Kinds.Length && Kinds[type].Has(kind);

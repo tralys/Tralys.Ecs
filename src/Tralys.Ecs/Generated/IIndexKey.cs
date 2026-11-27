@@ -8,5 +8,6 @@ public interface IIndexKey<TComponent, TKey>
 {
     /// <summary>The key of <paramref name="value"/>, or false to leave the entity out; <paramref name="parent"/> is the entity's parent for a
     /// per-parent index and default otherwise.</summary>
+    [Effect(Effects.None)]
     static abstract bool TryOf(in TComponent value, Entity parent, out TKey key);
 }

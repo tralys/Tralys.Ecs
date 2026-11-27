@@ -46,6 +46,7 @@ internal sealed class UniqueStore<TKey> : IndexStore
     {
         public TKey Key;
         public bool Detached;
+        public long Position;
         public int Prev;
         public int Next;
     }
@@ -217,11 +218,13 @@ internal sealed class UniqueStore<TKey> : IndexStore
 
     Dictionary<TKey, Head> Lane(bool isDetached) => isDetached ? detached ??= [] : live;
 
+    // A chain stays in write order, so its holder is the latest or earliest write whatever order a playback applied them in.
     void Link(int id)
     {
         var items = entries.Items;
         ref var entry = ref items[id];
         entry.Next = -1;
+        entry.Position = world.NextIndexPosition();
         var owner = entries.Owners[id];
         ref var head = ref CollectionsMarshal.GetValueRefOrAddDefault(
             Lane(entry.Detached),
@@ -239,13 +242,26 @@ internal sealed class UniqueStore<TKey> : IndexStore
             };
             return;
         }
-        items[head.Last].Next = id;
-        entry.Prev = head.Last;
-        head.Last = id;
-        if (latestWins)
-            head.Holder = owner;
-        else if (throws)
-            Contest(entry.Key, entry.Detached, owner);
+        var after = head.Last;
+        while (after >= 0 && items[after].Position > entry.Position)
+            after = items[after].Prev;
+        entry.Prev = after;
+        entry.Next = after >= 0 ? items[after].Next : head.First;
+        if (entry.Next >= 0)
+            items[entry.Next].Prev = id;
+        else
+            head.Last = id;
+        if (after >= 0)
+            items[after].Next = id;
+        else
+            head.First = id;
+        head.Holder = entries.Owners[latestWins ? head.Last : head.First];
+        if (throws)
+            Contest(
+                entry.Key,
+                entry.Detached,
+                head.Holder == owner ? entries.Owners[entry.Next] : owner
+            );
     }
 
     void Unlink(int id)

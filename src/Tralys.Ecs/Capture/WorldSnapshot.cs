@@ -8,8 +8,10 @@ public sealed class WorldSnapshot
     internal WorldSnapshot(
         World owner,
         AllocatorState allocator,
+        int[] homes,
         ulong version,
         int runSequence,
+        ArchetypeSignature[] signatures,
         ArchetypeState[] archetypes,
         SparseStorage?[] sparse,
         SparseTagStorage?[] sparseTags,
@@ -28,8 +30,10 @@ public sealed class WorldSnapshot
     {
         Owner = owner;
         Allocator = allocator;
+        Homes = homes;
         Version = version;
         RunSequence = runSequence;
+        Signatures = signatures;
         Archetypes = archetypes;
         Sparse = sparse;
         SparseTags = sparseTags;
@@ -48,8 +52,11 @@ public sealed class WorldSnapshot
 
     internal World Owner { get; }
     internal AllocatorState Allocator { get; }
+
+    internal int[] Homes { get; }
     internal ulong Version { get; }
     internal int RunSequence { get; }
+    internal ArchetypeSignature[] Signatures { get; }
     internal ArchetypeState[] Archetypes { get; }
     internal SparseStorage?[] Sparse { get; }
     internal SparseTagStorage?[] SparseTags { get; }
@@ -102,7 +109,7 @@ public sealed partial class World
 {
     /// <summary>Takes a whole-world image for <see cref="Reset"/>. The world must be settled: no open iteration or
     /// <see cref="EntityBatch"/>, no unplayed commands and no observer events waiting for playback.</summary>
-    [Effect(Effects.Settled)]
+    [Effect(Effects.Mutates | Effects.Settled)]
     public WorldSnapshot Snapshot()
     {
         CheckSettled(nameof(Snapshot));
@@ -113,6 +120,13 @@ public sealed partial class World
         var states = new ArchetypeState[archetypes.Count];
         for (var i = 0; i < states.Length; i++)
             states[i] = archetypes[i].Save();
+        var slots = allocator.Export();
+        var homes = new int[slots.Slots.Length];
+        for (var i = 0; i < homes.Length; i++)
+        {
+            homes[i] = slots.Slots[i].Archetype?.Id ?? -1;
+            slots.Slots[i].Archetype = null;
+        }
         var runs = new Dictionary<SystemId, ulong>?[queries.Length];
         for (var i = 0; i < runs.Length; i++)
             runs[i] = queries[i] is { } query ? new(query.watermarks) : null;
@@ -121,9 +135,11 @@ public sealed partial class World
             arenaStates[i] = (arenas[i] as IBufferArena)?.Save();
         return new WorldSnapshot(
             owner: this,
-            allocator: allocator.Export(),
+            allocator: slots,
+            homes: homes,
             version: version,
             runSequence: runSequence,
+            signatures: [.. archetypes.Select(a => a.Signature)],
             archetypes: states,
             sparse: [.. sparse.Select(s => s?.Clone())],
             sparseTags: [.. sparseTags.Select(s => s?.Clone())],
@@ -147,7 +163,13 @@ public sealed partial class World
     /// get <see cref="IWorldAttachment.OnWorldRestored"/> in attach order. Commands not yet played back are dropped, so a reset also recovers a world left mid-tick by an exception.</summary>
     /// <exception cref="ArgumentException">The snapshot was taken from another world.</exception>
     /// <exception cref="InvalidOperationException">An iteration is still open.</exception>
-    [Effect(Effects.Structural | Effects.MovesRows | Effects.Mutates)]
+    [Effect(
+        Effects.Structural
+            | Effects.MovesEntities
+            | Effects.Mutates
+            | Effects.OwnerThread
+            | Effects.MovesRowBlocks
+    )]
     public void Reset(WorldSnapshot baseline)
     {
         ArgumentNullException.ThrowIfNull(baseline);
@@ -162,17 +184,27 @@ public sealed partial class World
                 "Reset needs no open iteration; dispose the query enumerator first."
             );
         DiscardCommands();
+        ReconcileArchetypes(baseline.Signatures);
+        for (var i = 0; i < archetypes.Count; i++)
+            archetypes[i].Load(baseline.Archetypes[i]);
         allocator.Import(baseline.Allocator);
+        for (var i = 0; i < baseline.Homes.Length; i++)
+        {
+            var home = baseline.Homes[i];
+            allocator.Slots[i].Archetype = home < 0 ? null : archetypes[home];
+        }
         version = baseline.Version;
         runSequence = baseline.RunSequence;
         structuralCount++;
-        DropArchetypesFrom(baseline.Archetypes.Length);
-        for (var i = 0; i < archetypes.Count; i++)
-            archetypes[i].Load(baseline.Archetypes[i]);
+        changes.BeginEpoch();
         for (var i = 0; i < sparse.Length; i++)
         {
             if (baseline.Sparse[i] is not { } saved)
+            {
+                if (sparse[i] is { } dropped)
+                    dropped.Moves++;
                 sparse[i] = null;
+            }
             else if (sparse[i] is { } live)
                 live.Load(saved);
             else
@@ -251,6 +283,7 @@ public sealed partial class World
                     ? new(runs)
                     : [];
         }
+        VerifyInvariants();
         foreach (var attachment in attachmentOrder)
             attachment.OnWorldRestored(
                 this,
@@ -258,23 +291,56 @@ public sealed partial class World
             );
     }
 
-    // Later archetypes must get the ids and query match order a fresh world gives them.
-    void DropArchetypesFrom(int count)
+    // Ids and query match order come back as the snapshot had them, whatever archetypes were made or dropped since.
+    void ReconcileArchetypes(ArchetypeSignature[] signatures)
     {
-        for (var i = count; i < archetypes.Count; i++)
-            bySignature.Remove(archetypes[i].Signature);
-        archetypes.RemoveRange(count, archetypes.Count - count);
+        var common = 0;
+        while (
+            common < signatures.Length
+            && common < archetypes.Count
+            && archetypes[common].Signature.Equals(signatures[common])
+        )
+            common++;
+        if (common == signatures.Length && common == archetypes.Count)
+            return;
+        var kept = new Archetype[signatures.Length];
+        for (var i = 0; i < kept.Length; i++)
+        {
+            if (bySignature.TryGetValue(signatures[i], out var archetype))
+                archetype.Id = i;
+            else
+                archetype = new Archetype(i, signatures[i], registry, chunkCapacity, this);
+            kept[i] = archetype;
+        }
         foreach (var archetype in archetypes)
-            archetype.ForgetFrom(count);
+        {
+            if (archetype.Id >= kept.Length || kept[archetype.Id] != archetype)
+                archetype.Release();
+        }
+        archetypes.Clear();
+        archetypes.AddRange(kept);
+        bySignature.Clear();
+        foreach (var archetype in archetypes)
+        {
+            bySignature.Add(archetype.Signature, archetype);
+            partitionsUsed |= archetype.Detached;
+        }
+        foreach (var archetype in archetypes)
+            archetype.ForgetDropped(archetypes);
         foreach (var query in liveQueries)
-            query.ForgetFrom(count);
+        {
+            query.ForgetFrom(common);
+            for (var i = common; i < archetypes.Count; i++)
+                query.OnArchetype(archetypes[i]);
+        }
         foreach (var bundle in bundles)
         {
-            if (bundle?.Archetype is { } cached && cached.Id >= count)
+            if (bundle?.Archetype is { } cached && !Archetype.Kept(cached, archetypes))
                 bundle.Archetype = null;
         }
     }
 
+    [Effect(Effects.Settled)]
     void CheckSettled(string operation)
     {
         CheckWritable();
